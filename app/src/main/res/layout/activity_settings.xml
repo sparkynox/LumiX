@@ -11,7 +11,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Toolbar -->
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
@@ -25,7 +24,6 @@
         <View android:layout_width="match_parent" android:layout_height="1dp"
             android:background="@color/divider" />
 
-        <!-- CREDITS CARD -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -40,7 +38,6 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <!-- Section label -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -51,7 +48,6 @@
                     android:fontFamily="sans-serif-medium"
                     android:layout_marginBottom="14dp" />
 
-                <!-- Dev info row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -74,7 +70,6 @@
                         android:layout_marginStart="14dp">
 
                         <TextView
-                            android:id="@+id/tvCreditName"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Developed by SparkyNox"
@@ -83,7 +78,6 @@
                             android:fontFamily="sans-serif-medium" />
 
                         <TextView
-                            android:id="@+id/tvCreditDesc"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="Lumi X • Yori Ecosystem"
@@ -93,7 +87,6 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Link buttons -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -118,7 +111,7 @@
                         android:layout_width="0dp"
                         android:layout_height="38dp"
                         android:layout_weight="1"
-                        android:text="Source Code"
+                        android:text="Source"
                         android:textSize="12sp"
                         android:textColor="@color/accent"
                         app:strokeColor="@color/accent"
@@ -141,57 +134,6 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- ACTIONS CARD -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="0dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ACCOUNT"
-                    android:textColor="@color/accent"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.12"
-                    android:fontFamily="sans-serif-medium"
-                    android:layout_marginBottom="14dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnClearHistory"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="Clear Watch History"
-                    android:textColor="@color/text_primary"
-                    app:strokeColor="@color/divider"
-                    app:cornerRadius="8dp"
-                    android:layout_marginBottom="10dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnLogout"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="Sign Out"
-                    android:textColor="@color/bg_primary"
-                    app:backgroundTint="#E53935"
-                    app:cornerRadius="8dp" />
-
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- Version info -->
         <TextView
             android:id="@+id/tvVersion"
             android:layout_width="match_parent"
