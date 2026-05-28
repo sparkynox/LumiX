@@ -34,54 +34,47 @@ jobs:
 
       - name: Create google-services.json
         run: |
-          cat > app/google-services.json << 'EOF'
-{
-  "project_info": {
-    "project_number": "464309606770",
-    "project_id": "lumix-c55a9",
-    "storage_bucket": "lumix-c55a9.firebasestorage.app"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
-        "android_client_info": {
-          "package_name": "com.sparkynox.lumix"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
-        }
-      ]
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
-        "android_client_info": {
-          "package_name": "com.sparkynox.lumix.debug"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
-        }
-      ]
-    }
-  ],
-  "configuration_version": "1"
-}
-EOF
+          echo '{
+            "project_info": {
+              "project_number": "464309606770",
+              "project_id": "lumix-c55a9"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
+                  "android_client_info": {
+                    "package_name": "com.sparkynox.lumix"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
+                  }
+                ]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
+                  "android_client_info": {
+                    "package_name": "com.sparkynox.lumix.debug"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
+                  }
+                ]
+              }
+            ]
+          }' > app/google-services.json
 
-      - name: Add google client id string
+      - name: Add string resource
         run: |
           mkdir -p app/src/main/res/values
-          echo '<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
-</resources>' > app/src/main/res/values/google-ids.xml
+          echo '<resources>
+            <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
+          </resources>' > app/src/main/res/values/ids.xml
 
       - name: Build APK
         run: ./gradlew assembleDebug
