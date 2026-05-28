@@ -1,4 +1,4 @@
-# Lumi X ★
+# Lumi X ★ 
 
 > YouTube background play + no-ads client using yt-dlp + ExoPlayer
 
