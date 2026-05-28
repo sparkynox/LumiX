@@ -5,12 +5,9 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  release:
-    types: [ created ]
 
 jobs:
   build:
-    name: Build APKs (ARMv7 + ARM64)
     runs-on: ubuntu-latest
 
     steps:
@@ -28,40 +25,27 @@ jobs:
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      - name: Download yt-dlp binaries
+      - name: Download yt-dlp
         run: |
           mkdir -p app/src/main/assets
           curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" -o app/src/main/assets/yt-dlp_arm64
           curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" -o app/src/main/assets/yt-dlp_armv7
           chmod +x app/src/main/assets/yt-dlp_*
 
-      - name: Remove Firebase plugin (since no google-services.json)
+      - name: Fix app/build.gradle - Remove duplicate plugin
         run: |
-          # Comment out the google-services plugin in app/build.gradle
-          sed -i 's/^plugins {/plugins {\n    id("com.google.gms.google-services") apply false/' app/build.gradle || true
-          # Or just create dummy file as fallback
-          echo '{"project_info":{"project_number":"123","project_id":"dummy"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.sparkynox.lumix"}}}]}' > app/google-services.json
+          # Remove the duplicate google-services line from app/build.gradle
+          sed -i '/com.google.gms.google-services/d' app/build.gradle
 
-      - name: Build Debug APKs
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Create google-services.json
+        run: |
+          echo '{"project_info":{},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.sparkynox.lumix"}}}]}' > app/google-services.json
 
-      - name: List built APKs
-        run: find app/build/outputs/apk -name "*.apk" | sort
+      - name: Build APK
+        run: ./gradlew assembleDebug
 
-      - name: Upload ARM64 Debug APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LumiX-arm64-debug
-          path: app/build/outputs/apk/debug/*arm64*.apk
-
-      - name: Upload ARMv7 Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LumiX-armv7-debug
-          path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
-
-      - name: Upload Universal Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LumiX-universal-debug
-          path: app/build/outputs/apk/debug/*universal*.apk
+          name: LumiX-APK
+          path: app/build/outputs/apk/debug/*.apk
