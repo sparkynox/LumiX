@@ -1,1 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark background like YouTube -->
+    <color name="bg_primary">#0F0F0F</color>
+    <color name="bg_secondary">#1A1A1A</color>
+    <color name="bg_card">#212121</color>
+    <color name="bg_surface">#272727</color>
 
+    <!-- Accent — soft lavender/purple matching Lumi's hair -->
+    <color name="accent">#B8A9F5</color>
+    <color name="accent_dark">#8B7FCC</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#AAAAAA</color>
+    <color name="text_hint">#666666</color>
+
+    <!-- UI elements -->
+    <color name="divider">#2A2A2A</color>
+    <color name="ripple">#33B8A9F5</color>
+    <color name="icon_tint">#FFFFFF</color>
+
+    <!-- Status / notification bar -->
+    <color name="status_bar">#0F0F0F</color>
+</resources>

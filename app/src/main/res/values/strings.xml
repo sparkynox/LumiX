@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lumi X</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="welcome_back">Welcome back</string>
+    <string name="paste_url_hint">Paste YouTube URL or share from YouTube…</string>
+    <string name="play">Play</string>
+    <string name="history">History</string>
+    <string name="settings">Settings</string>
+    <string name="logout">Sign out</string>
+    <string name="clear_history">Clear history</string>
+    <string name="credits">Credits</string>
+    <string name="credit_dev">Developed by SparkyNox</string>
+    <string name="credit_eco">Lumi X • Yori Ecosystem</string>
+    <string name="github">GitHub</string>
+    <string name="source_code">Source Code</string>
+    <string name="modrinth">Modrinth</string>
+    <string name="no_history">No watch history yet.\nPaste a YouTube URL above to start!</string>
+    <string name="background_mode">Background mode</string>
+    <string name="video_mode">Video mode</string>
+    <string name="loading">Fetching video…</string>
+</resources>
