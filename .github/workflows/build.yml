@@ -32,14 +32,17 @@ jobs:
           curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" -o app/src/main/assets/yt-dlp_armv7
           chmod +x app/src/main/assets/yt-dlp_*
 
-      - name: Fix app/build.gradle - Remove duplicate plugin
+      - name: Use your google-services.json from secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          # Remove the duplicate google-services line from app/build.gradle
-          sed -i '/com.google.gms.google-services/d' app/build.gradle
-
-      - name: Create google-services.json
-        run: |
-          echo '{"project_info":{},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.sparkynox.lumix"}}}]}' > app/google-services.json
+          echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
+          # Extract and set the web_client_id
+          WEB_CLIENT_ID=$(grep -o '"web_client_id"[[:space:]]*:[[:space:]]*"[^"]*"' app/google-services.json | head -1 | cut -d'"' -f4)
+          if [ ! -z "$WEB_CLIENT_ID" ]; then
+            mkdir -p app/src/main/res/values
+            echo "<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><string name=\"default_web_client_id\">$WEB_CLIENT_ID</string></resources>" > app/src/main/res/values/generated-ids.xml
+          fi
 
       - name: Build APK
         run: ./gradlew assembleDebug
