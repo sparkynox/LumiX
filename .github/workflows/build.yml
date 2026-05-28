@@ -1,0 +1,100 @@
+name: Build LumiX APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    name: Build APKs (ARMv7 + ARM64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Download yt-dlp binaries
+        run: |
+          mkdir -p app/src/main/assets
+          # ARM64 (64-bit)
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" \
+            -o app/src/main/assets/yt-dlp_arm64
+          # ARMv7 (32-bit)
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" \
+            -o app/src/main/assets/yt-dlp_armv7
+          chmod +x app/src/main/assets/yt-dlp_arm64
+          chmod +x app/src/main/assets/yt-dlp_armv7
+          echo "yt-dlp binaries downloaded:"
+          ls -lh app/src/main/assets/
+
+      - name: Setup google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+        # Add GOOGLE_SERVICES_JSON to your GitHub repo secrets
+        # Get it from Firebase Console > Project Settings > Your app
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APKs (all ABIs)
+        run: ./gradlew assembleDebug
+
+      - name: Build Release APKs (all ABIs)
+        run: ./gradlew assembleRelease
+        continue-on-error: true
+        # Release needs signing — will succeed once you add keystore secrets
+
+      - name: List built APKs
+        run: find app/build/outputs/apk -name "*.apk" | sort
+
+      - name: Upload ARM64 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumiX-arm64-debug
+          path: app/build/outputs/apk/debug/*arm64*.apk
+
+      - name: Upload ARMv7 Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumiX-armv7-debug
+          path: app/build/outputs/apk/debug/*armeabi-v7a*.apk
+
+      - name: Upload Universal Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumiX-universal-debug
+          path: app/build/outputs/apk/debug/*universal*.apk
+
+      # On release: attach APKs to the GitHub Release
+      - name: Upload to Release (ARM64)
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+          asset_name: LumiX-arm64-v8a.apk
+          asset_content_type: application/vnd.android.package-archive
+
+      - name: Upload to Release (ARMv7)
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk
+          asset_name: LumiX-armeabi-v7a.apk
+          asset_content_type: application/vnd.android.package-archive
