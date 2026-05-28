@@ -86,11 +86,15 @@ jobs:
 
       - name: Build Release APKs
         id: buildRelease
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           ./gradlew assembleRelease --stacktrace || echo "status=failed" >> $GITHUB_OUTPUT
 
       - name: Build Debug APKs (Fallback)
         if: failure()
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
           ./gradlew assembleDebug --stacktrace
 
