@@ -1,116 +1,83 @@
 package com.sparkynox.lumix.service
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.app.*
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import androidx.core.app.NotificationCompat
 import com.sparkynox.lumix.R
-import com.sparkynox.lumix.ui.PlayerActivity
+import com.sparkynox.lumix.ui.MainActivity
 
-class PlayerService : MediaSessionService() {
-
-    private var player: ExoPlayer? = null
-    private var mediaSession: MediaSession? = null
+class PlayerService : Service() {
 
     companion object {
-        const val ACTION_PLAY = "com.sparkynox.lumix.PLAY"
-        const val ACTION_PAUSE = "com.sparkynox.lumix.PAUSE"
-        const val ACTION_STOP = "com.sparkynox.lumix.STOP"
-        const val EXTRA_STREAM_URL = "stream_url"
-        const val EXTRA_TITLE = "title"
-        const val EXTRA_UPLOADER = "uploader"
-        const val CHANNEL_ID = "lumix_playback"
+        const val ACTION_START = "com.sparkynox.lumix.START"
+        const val ACTION_TERMINATE = "com.sparkynox.lumix.TERMINATE"
+        const val CHANNEL_ID = "lumix_bg"
+        const val NOTIF_ID = 1
     }
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
-
-        player = ExoPlayer.Builder(this).build().also { exo ->
-            exo.playWhenReady = true
-        }
-
-        mediaSession = MediaSession.Builder(this, player!!).build()
-    }
-
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
+        createChannel()
+        startForeground(NOTIF_ID, buildNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        super.onStartCommand(intent, flags, startId)
-
         when (intent?.action) {
-            ACTION_PLAY -> {
-                val url = intent.getStringExtra(EXTRA_STREAM_URL) ?: return START_NOT_STICKY
-                val title = intent.getStringExtra(EXTRA_TITLE) ?: "Lumi X"
-                val uploader = intent.getStringExtra(EXTRA_UPLOADER) ?: ""
-
-                val mediaItem = MediaItem.fromUri(url)
-                player?.setMediaItem(mediaItem)
-                player?.prepare()
-                player?.play()
-
-                startForeground(1, buildNotification(title, uploader))
-            }
-
-            ACTION_PAUSE -> {
-                if (player?.isPlaying == true) player?.pause()
-                else player?.play()
-            }
-
-            ACTION_STOP -> {
-                player?.stop()
+            ACTION_TERMINATE -> {
                 stopSelf()
+                // Kill the whole app
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
+            else -> {
+                startForeground(NOTIF_ID, buildNotification())
             }
         }
-
         return START_STICKY
     }
 
-    private fun buildNotification(title: String, uploader: String): Notification {
+    private fun buildNotification(): Notification {
+        // Open app on tap
         val openIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, PlayerActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(uploader)
+        // Terminate action
+        val terminateIntent = PendingIntent.getService(
+            this, 1,
+            Intent(this, PlayerService::class.java).apply { action = ACTION_TERMINATE },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Lumi X")
+            .setContentText("Lumi X Running")
             .setSmallIcon(R.drawable.ic_play)
             .setContentIntent(openIntent)
+            .addAction(R.drawable.ic_close, "Terminate", terminateIntent)
             .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
-    private fun createNotificationChannel() {
+    private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Lumi X Playback",
+                "Lumi X Background",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Background playback controls"
+                description = "Keeps Lumi X running in background"
+                setSound(null, null)
             }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
         }
     }
 
-    override fun onDestroy() {
-        mediaSession?.release()
-        player?.release()
-        super.onDestroy()
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
+    override fun onBind(intent: Intent?): IBinder? = null
 }
