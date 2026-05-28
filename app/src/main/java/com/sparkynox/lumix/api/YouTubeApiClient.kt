@@ -17,7 +17,7 @@ object YouTubeApiClient {
     private const val BASE = "https://www.googleapis.com/youtube/v3"
     // IMPORTANT: Replace with your YouTube Data API v3 key from Google Cloud Console
     // Enable: YouTube Data API v3 at console.cloud.google.com
-    private const val API_KEY = "YOUR_YOUTUBE_API_KEY_HERE"
+    private const val API_KEY = "286027396796-hlibr6brub20ik6si5tkdherjatflkjr.apps.googleusercontent.com"
 
     // Get OAuth access token from the signed-in Google account
     private fun getAccessToken(context: Context): String? {
