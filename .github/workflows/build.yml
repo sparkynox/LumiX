@@ -92,7 +92,6 @@ jobs:
           ./gradlew assembleRelease --stacktrace || echo "status=failed" >> $GITHUB_OUTPUT
 
       - name: Build Debug APKs (Fallback)
-        if: failure()
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: |
