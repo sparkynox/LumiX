@@ -32,7 +32,7 @@ jobs:
           curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" -o app/src/main/assets/yt-dlp_armv7
           chmod +x app/src/main/assets/yt-dlp_*
 
-      - name: Create google-services.json with debug variant
+      - name: Create google-services.json
         run: |
           cat > app/google-services.json << 'EOF'
 {
@@ -54,12 +54,7 @@ jobs:
         {
           "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
         }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
+      ]
     },
     {
       "client_info": {
@@ -73,27 +68,20 @@ jobs:
         {
           "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
         }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
+      ]
     }
   ],
   "configuration_version": "1"
 }
 EOF
 
-      - name: Add default_web_client_id
+      - name: Add google client id string
         run: |
           mkdir -p app/src/main/res/values
-          cat > app/src/main/res/values/google-ids.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
+          echo '<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
-</resources>
-EOF
+</resources>' > app/src/main/res/values/google-ids.xml
 
       - name: Build APK
         run: ./gradlew assembleDebug
