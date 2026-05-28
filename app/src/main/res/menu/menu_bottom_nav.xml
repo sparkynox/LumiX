@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/nav_home"          android:icon="@drawable/ic_home"          android:title="Home"          android:checked="true" />
-    <item android:id="@+id/nav_subscriptions" android:icon="@drawable/ic_subscriptions" android:title="Subscriptions" />
-    <item android:id="@+id/nav_search"        android:icon="@drawable/ic_search"        android:title="Search"        />
-    <item android:id="@+id/nav_liked"         android:icon="@drawable/ic_liked"         android:title="Liked"         />
-    <item android:id="@+id/nav_history"       android:icon="@drawable/ic_history"       android:title="History"       />
-</menu>
