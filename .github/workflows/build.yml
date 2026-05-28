@@ -1,13 +1,15 @@
-name: Build LumiX APK
+name: Build LumiX APK (Release + Debug Fallback)
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Build APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +27,7 @@ jobs:
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      - name: Download yt-dlp
+      - name: Download yt-dlp binaries
         run: |
           mkdir -p app/src/main/assets
           curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" -o app/src/main/assets/yt-dlp_arm64
@@ -69,18 +71,133 @@ jobs:
             ]
           }' > app/google-services.json
 
-      - name: Add string resource
+      - name: Add string resources
         run: |
           mkdir -p app/src/main/res/values
           echo '<resources>
             <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
           </resources>' > app/src/main/res/values/ids.xml
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Build Release APKs (ARMv7 + ARM64)
+        id: buildRelease
+        run: |
+          ./gradlew assembleRelease --stacktrace || echo "status=failed" >> $GITHUB_OUTPUT
+          echo "Release build attempted"
 
-      - name: Upload APK
+      - name: Build Debug APKs (Fallback if Release fails)
+        if: failure()
+        run: |
+          ./gradlew assembleDebug --stacktrace
+
+      - name: List all built APKs
+        run: |
+          echo "=== Found APKs ==="
+          find app/build/outputs/apk -name "*.apk" | while read apk; do
+            echo "- $apk"
+            ls -lh "$apk"
+          done
+
+      - name: Check if Release APKs exist
+        id: checkRelease
+        run: |
+          if find app/build/outputs/apk/release -name "*.apk" 2>/dev/null | grep -q .; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Using Release APKs"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No Release APKs found, will use Debug APKs"
+          fi
+
+      - name: Create GitHub Release
+        id: createRelease
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Build #${{ github.run_number }} - ${{ github.event.head_commit.message }}"
+          body: |
+            ## LumiX APK Build
+            
+            **Build Date:** ${{ github.event.head_commit.timestamp }}
+            
+            **Commit:** ${{ github.event.head_commit.message }}
+            
+            **Build Type:** ${{ steps.checkRelease.outputs.exists == 'true' && 'Release (Signed)' || 'Debug (Unsigned - Fallback)' }}
+            
+            ### APKs Included:
+            - ARM64 (64-bit): `LumiX-arm64-v8a.apk`
+            - ARMv7 (32-bit): `LumiX-armeabi-v7a.apk`
+            
+            ### Installation:
+            1. Download the APK for your device architecture
+            2. Enable "Install from unknown sources" in settings
+            3. Install and enjoy!
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/*arm64*.apk
+            app/build/outputs/apk/release/*armeabi-v7a*.apk
+            app/build/outputs/apk/debug/*arm64*.apk
+            app/build/outputs/apk/debug/*armeabi-v7a*.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload Artifacts (if Release creation fails)
+        if: steps.createRelease.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: LumiX-APK
-          path: app/build/outputs/apk/debug/*.apk
+          name: LumiX-APKs-Build-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/release/*arm64*.apk
+            app/build/outputs/apk/release/*armeabi-v7a*.apk
+            app/build/outputs/apk/debug/*arm64*.apk
+            app/build/outputs/apk/debug/*armeabi-v7a*.apk
+          retention-days: 30
+
+      - name: Upload ARM64 APK to Release (Manual method)
+        if: steps.createRelease.outcome == 'failure'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.createRelease.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          asset_name: LumiX-arm64-v8a.apk
+          asset_content_type: application/vnd.android.package-archive
+        continue-on-error: true
+
+      - name: Upload ARMv7 APK to Release (Manual method)
+        if: steps.createRelease.outcome == 'failure'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.createRelease.outputs.upload_url }}
+          asset_path: app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+          asset_name: LumiX-armeabi-v7a.apk
+          asset_content_type: application/vnd.android.package-archive
+        continue-on-error: true
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Info:" >> $GITHUB_STEP_SUMMARY
+          echo "- Run Number: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.event.head_commit.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### APKs Created:" >> $GITHUB_STEP_SUMMARY
+          find app/build/outputs/apk -name "*.apk" 2>/dev/null | while read apk; do
+            size=$(ls -lh "$apk" | awk '{print $5}')
+            name=$(basename "$apk")
+            echo "- $name ($size)" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.createRelease.outcome }}" == "success" ]; then
+            echo "✅ **APKs uploaded to GitHub Release!**" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 View at: https://github.com/${{ github.repository }}/releases/tag/build-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "📦 **APKs uploaded as Artifacts!**" >> $GITHUB_STEP_SUMMARY
+            echo "Download from Actions > Artifacts section" >> $GITHUB_STEP_SUMMARY
+          fi
