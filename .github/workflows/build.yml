@@ -23,10 +23,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Generate and fix gradlew
+      - name: Generate and fix gradlew with compatible Gradle version
         run: |
           if [ ! -f "gradlew" ]; then
-            gradle wrapper
+            gradle wrapper --gradle-version 7.6.4
           fi
           chmod +x gradlew
 
@@ -47,16 +47,13 @@ jobs:
       - name: Setup google-services.json
         run: |
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
-        # Add GOOGLE_SERVICES_JSON to your GitHub repo secrets
-        # Get it from Firebase Console > Project Settings > Your app
 
       - name: Build Debug APKs (all ABIs)
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Build Release APKs (all ABIs)
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --stacktrace
         continue-on-error: true
-        # Release needs signing — will succeed once you add keystore secrets
 
       - name: List built APKs
         run: find app/build/outputs/apk -name "*.apk" | sort
@@ -79,7 +76,6 @@ jobs:
           name: LumiX-universal-debug
           path: app/build/outputs/apk/debug/*universal*.apk
 
-      # On release: attach APKs to the GitHub Release
       - name: Upload to Release (ARM64)
         if: github.event_name == 'release'
         uses: actions/upload-release-asset@v1
