@@ -26,7 +26,7 @@ jobs:
       - name: Generate and fix gradlew with compatible Gradle version
         run: |
           if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 7.6.4
+            gradle wrapper --gradle-version 8.7
           fi
           chmod +x gradlew
 
