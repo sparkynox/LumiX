@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+app/google-services.json
+app/src/main/assets/yt-dlp_arm64
+app/src/main/assets/yt-dlp_armv7
+*.keystore
