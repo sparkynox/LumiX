@@ -2,6 +2,7 @@ package com.sparkynox.lumix.ui
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.view.KeyEvent
@@ -15,67 +16,130 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val ultimateTrickJS = """
+    // 🔥 THE REAL BACKGROUND PLAY + AD BLOCK
+    private val theRealJS = """
         (function() {
-            console.log('🎭 LumiX Ultimate Trick Mode');
+            console.log('🔥 THE REAL DEAL - Background + Ad Block');
             
-            // Trick 1: YouTube ko lage video download hai
-            Object.defineProperty(navigator, 'onLine', { get: () => true });
-            if (navigator.connection) {
-                Object.defineProperty(navigator.connection, 'saveData', { get: () => true });
-            }
+            // ===== THE REAL BACKGROUND PLAY TRICK =====
+            // YouTube checks these 3 things to stop video:
+            // 1. document.hidden
+            // 2. document.visibilityState  
+            // 3. window.blur event
             
-            // Trick 2: Block ad requests
-            const XHR = XMLHttpRequest.prototype;
-            const originalOpen = XHR.open;
-            XHR.open = function(method, url) {
-                if (url && (url.includes('googleads') || url.includes('doubleclick') || 
-                    url.includes('pagead') || url.includes('ad.doubleclick'))) {
-                    this._blocked = true;
-                    return;
-                }
-                return originalOpen.apply(this, arguments);
-            };
-            
-            // Trick 3: Fake as YouTube app
-            Object.defineProperty(navigator, 'userAgent', {
-                get: () => 'com.google.android.youtube/19.01.34 (Android 14)'
+            // Block ALL of them
+            Object.defineProperty(document, 'hidden', { 
+                get: function() { return false; },
+                configurable: false
             });
             
-            // Trick 4: Fake visibility
-            Object.defineProperty(document, 'hidden', { get: () => false });
-            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            Object.defineProperty(document, 'visibilityState', { 
+                get: function() { return 'visible'; },
+                configurable: false 
+            });
             
-            // Trick 5: Hide all ads
+            // Kill ALL pause events
+            const blockAllPauseEvents = () => {
+                const video = document.querySelector('video');
+                if (video) {
+                    // Override pause method completely
+                    const originalPause = video.pause;
+                    video.pause = function() {
+                        const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+                        if (isAd) {
+                            return originalPause.call(this);
+                        }
+                        console.log('Blocked pause - playing in background');
+                        return false;
+                    };
+                    
+                    // Force play if paused
+                    setInterval(() => {
+                        if (video.paused && !video.ended && video.currentTime > 0) {
+                            const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+                            if (!isAd) {
+                                video.play().catch(e => console.log('Play error:', e));
+                            }
+                        }
+                    }, 200);
+                } else {
+                    setTimeout(blockAllPauseEvents, 100);
+                }
+            };
+            
+            // Block all visibility change events at root level
+            const events = ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide', 'focus', 'resize'];
+            events.forEach(eventType => {
+                window.addEventListener(eventType, (e) => {
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return false;
+                }, true);
+                
+                document.addEventListener(eventType, (e) => {
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return false;
+                }, true);
+            });
+            
+            // Force document to always be visible
+            const forceVisible = () => {
+                if (document.hidden || document.visibilityState !== 'visible') {
+                    Object.defineProperty(document, 'hidden', { get: () => false });
+                    Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+                }
+            };
+            
+            setInterval(forceVisible, 100);
+            
+            // Start the video protection
+            setTimeout(blockAllPauseEvents, 500);
+            
+            // ===== AD BLOCK =====
+            const blockAds = () => {
+                // Hide ad elements
+                document.querySelectorAll('.video-ads, .ytp-ad-module, .ytp-ad-player-overlay, .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads, .ytd-display-ad-renderer, .ytd-promoted-video-renderer, ytd-ad-slot-renderer, .ytp-ad-overlay-container').forEach(ad => {
+                    ad.remove();
+                    ad.style.display = 'none';
+                });
+                
+                // Skip buttons
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
+                    if (btn.offsetParent !== null) btn.click();
+                });
+                
+                // Mute ads only
+                const video = document.querySelector('video');
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+                if (video && isAd && !video.muted) {
+                    video.muted = true;
+                } else if (video && !isAd && video.muted) {
+                    video.muted = false;
+                }
+            };
+            
+            setInterval(blockAds, 200);
+            new MutationObserver(blockAds).observe(document.body, { childList: true, subtree: true });
+            
+            // Add style to hide ads
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
                 .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
                 .ytd-display-ad-renderer, ytd-ad-slot-renderer,
-                .ytp-ad-overlay-container, .ytd-banner-promo-renderer {
+                .ytp-ad-overlay-container {
                     display: none !important;
                     visibility: hidden !important;
                     height: 0px !important;
+                    width: 0px !important;
                 }
             `;
             document.head.appendChild(style);
             
-            // Trick 6: Auto skip
-            setInterval(() => {
-                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
-                    if (btn.offsetParent !== null) btn.click();
-                });
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing');
-                if (video && isAd) {
-                    video.muted = true;
-                    if (video.duration && video.duration < 30) video.currentTime = video.duration;
-                } else if (video && video.muted && !isAd) {
-                    video.muted = false;
-                }
-            }, 200);
-            
-            console.log('✅ Trick Mode Active');
+            console.log('✅ THE REAL DEAL - Background play WILL work!');
         })();
     """.trimIndent()
 
@@ -109,18 +173,30 @@ class MainActivity : AppCompatActivity() {
                 setSupportZoom(true)
                 builtInZoomControls = true
                 displayZoomControls = false
-                userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
+                allowContentAccess = true
+                allowFileAccess = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                }
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(ultimateTrickJS, null)
+                    view?.evaluateJavascript(theRealJS, null)
+                    // Keep re-injecting to ensure it sticks
                     view?.postDelayed({
-                        view?.evaluateJavascript(ultimateTrickJS, null)
-                    }, 2000)
+                        view?.evaluateJavascript(theRealJS, null)
+                    }, 1000)
+                    view?.postDelayed({
+                        view?.evaluateJavascript(theRealJS, null)
+                    }, 3000)
+                    view?.postDelayed({
+                        view?.evaluateJavascript(theRealJS, null)
+                    }, 5000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -128,6 +204,8 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
             }
+
+            webChromeClient = object : WebChromeClient() {}
 
             loadUrl("https://m.youtube.com")
         }
@@ -145,14 +223,25 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    // CRITICAL FOR BACKGROUND PLAY - Do NOT let WebView pause
     override fun onPause() {
         super.onPause()
+        // This is the secret - keep WebView alive
         binding.webView.onResume()
+        binding.webView.loadUrl("javascript:document.querySelector('video')?.play();")
     }
 
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
+        binding.webView.evaluateJavascript(theRealJS, null)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Most important - don't stop the WebView
+        binding.webView.onResume()
+        binding.webView.loadUrl("javascript:(function(){document.querySelector('video')?.play();})();")
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
