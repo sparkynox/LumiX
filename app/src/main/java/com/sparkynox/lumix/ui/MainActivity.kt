@@ -15,74 +15,164 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val adBlockJS = """
+    // 🔥 SUPER CHARGED AD BLOCKER - Full power!
+    private val superAdBlockJS = """
         (function() {
-            function skipAd() {
-                var skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, button.ytp-ad-skip-button-modern');
-                if (skipBtn) skipBtn.click();
-            }
-
-            function nukeAds() {
-                var adSelectors = [
-                    '.ytp-ad-module', '.ytp-ad-overlay-container',
-                    '.ytp-ad-text-overlay', '.ytp-ad-image-overlay',
-                    '.ytp-ad-player-overlay', '.ytp-ad-action-interstitial',
-                    '#masthead-ad', '#player-ads',
-                    'ytd-banner-promo-renderer', 'ytd-video-masthead-ad-v3-renderer',
-                    'ytd-in-feed-ad-layout-renderer', 'ytd-ad-slot-renderer',
-                    'ytd-statement-banner-renderer', 'ytd-display-ad-renderer',
-                    'ytd-promoted-sparkles-web-renderer', 'ytd-promoted-video-renderer'
+            console.log('🔥 LumiX Super Ad Blocker Active');
+            
+            // Kill ALL ads instantly
+            const killAllAds = () => {
+                // CSS selectors for all known YouTube ads
+                const selectors = [
+                    '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
+                    '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
+                    '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
+                    '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
+                    '.ytp-ad-overlay-container', '.ytp-ad-skip-button-container',
+                    'ytd-ad-slot-renderer', 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
+                    '.ytp-ad-simple-ad-badge', '.ytp-ad-advertiser-info',
+                    '#masthead-ad', 'ytd-banner-promo-renderer',
+                    'ytd-video-masthead-ad-v3-renderer', 'ytd-in-feed-ad-layout-renderer',
+                    'ytd-statement-banner-renderer', 'ytd-promoted-sparkles-web-renderer',
+                    '.ad-container', '[class*="-ad-"]', '[id*="-ad-"]'
                 ];
-                adSelectors.forEach(function(sel) {
-                    document.querySelectorAll(sel).forEach(function(el) {
-                        el.style.setProperty('display', 'none', 'important');
-                        el.style.setProperty('visibility', 'hidden', 'important');
-                        el.style.setProperty('height', '0', 'important');
-                        el.style.setProperty('width', '0', 'important');
+                
+                selectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(ad => {
+                        try {
+                            ad.remove();
+                            ad.style.display = 'none';
+                            ad.style.visibility = 'hidden';
+                            ad.style.height = '0px';
+                            ad.style.width = '0px';
+                        } catch(e) {}
                     });
                 });
-
-                var video = document.querySelector('video');
+            };
+            
+            // Mute ads, unmute real videos
+            const controlAudio = () => {
+                const video = document.querySelector('video');
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                
                 if (video) {
-                    var isAd = document.querySelector('.ad-showing');
                     if (isAd) {
                         video.muted = true;
                         video.volume = 0;
-                        if (video.duration && !isNaN(video.duration) && video.duration > 0) {
-                            try { video.currentTime = video.duration; } catch(e) {}
+                        // Fast forward through ad if possible
+                        if (video.duration && video.duration < 30 && video.duration > 0) {
+                            video.currentTime = video.duration;
                         }
-                    } else {
-                        if (video.muted) { video.muted = false; video.volume = 1; }
+                    } else if (!video.muted) {
+                        // Only unmute if video is playing and not an ad
+                        if (!video.paused) {
+                            video.muted = false;
+                            video.volume = 1;
+                        }
                     }
                 }
+            };
+            
+            // Auto skip any ad button
+            const clickSkip = () => {
+                const btns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button__text');
+                btns.forEach(btn => {
+                    if (btn.offsetParent !== null) btn.click();
+                });
+            };
+            
+            // Inject CSS to hide ads
+            const style = document.createElement('style');
+            style.textContent = `
+                .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
+                .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
+                .ytd-display-ad-renderer, [class*="-ad-"],
+                .ytp-ad-overlay-container {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0px !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+            `;
+            document.head.appendChild(style);
+            
+            // Run continuously
+            let last = 0;
+            function superLoop(time) {
+                if (time - last > 150) {
+                    killAllAds();
+                    controlAudio();
+                    clickSkip();
+                    last = time;
+                }
+                requestAnimationFrame(superLoop);
             }
-
-            setInterval(function() { skipAd(); nukeAds(); }, 300);
-
-            var observer = new MutationObserver(function() { skipAd(); nukeAds(); });
+            requestAnimationFrame(superLoop);
+            
+            // Watch for new elements
+            const observer = new MutationObserver(() => {
+                killAllAds();
+                clickSkip();
+            });
             observer.observe(document.body, { childList: true, subtree: true });
+            
+            console.log('✅ LumiX Ultimate Ad Blocker Ready');
         })();
     """.trimIndent()
 
-    private val backgroundPlayJS = """
+    // 🔥 IMPROVED BACKGROUND PLAY - Never stops!
+    private val superBackgroundJS = """
         (function() {
-            Object.defineProperty(document, 'hidden', { get: function() { return false; } });
-            Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
-            document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
-            document.addEventListener('webkitvisibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
-            window.addEventListener('blur', function(e) { e.stopImmediatePropagation(); }, true);
-            window.addEventListener('pagehide', function(e) { e.stopImmediatePropagation(); }, true);
-
-            // Keep video playing
-            var video = document.querySelector('video');
+            console.log('🎵 LumiX Background Player Active');
+            
+            // Fake visibility state - YouTube can't know we're in background
+            Object.defineProperty(document, 'hidden', { get: () => false });
+            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            
+            // Block all visibility change events
+            const blockEvent = (e) => {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                return false;
+            };
+            
+            document.addEventListener('visibilitychange', blockEvent, true);
+            document.addEventListener('webkitvisibilitychange', blockEvent, true);
+            window.addEventListener('blur', blockEvent, true);
+            window.addEventListener('pagehide', blockEvent, true);
+            window.addEventListener('beforeunload', blockEvent, true);
+            
+            // Force video to keep playing
+            const keepPlaying = () => {
+                const video = document.querySelector('video');
+                if (video && !video.paused && !video.ended && !video.seeking) {
+                    // Video is playing - do nothing
+                    return;
+                }
+                
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+                if (video && !isAd && video.paused && !video.ended && video.currentTime > 0) {
+                    video.play().catch(e => console.log('Play blocked:', e));
+                }
+            };
+            
+            // Override pause method
+            const video = document.querySelector('video');
             if (video) {
-                video.addEventListener('pause', function() {
-                    setTimeout(function() {
-                        var isAd = document.querySelector('.ad-showing');
-                        if (!isAd) video.play();
-                    }, 200);
-                });
+                const originalPause = video.pause;
+                video.pause = function() {
+                    const isAd = document.querySelector('.ad-showing');
+                    if (!isAd) {
+                        console.log('Blocked pause attempt');
+                        return;
+                    }
+                    return originalPause.call(this);
+                };
             }
+            
+            setInterval(keepPlaying, 500);
+            console.log('✅ LumiX Background Player Ready');
         })();
     """.trimIndent()
 
@@ -104,7 +194,7 @@ class MainActivity : AppCompatActivity() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "LumiX::BackgroundPlay"
         )
-        wakeLock?.acquire(12 * 60 * 60 * 1000L) // 12 hours max
+        wakeLock?.acquire(12 * 60 * 60 * 1000L)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -118,25 +208,38 @@ class MainActivity : AppCompatActivity() {
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(false)
-                userAgentString = "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
                 allowContentAccess = true
                 allowFileAccess = true
+                setRenderPriority(WebSettings.RenderPriority.HIGH)
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(backgroundPlayJS, null)
-                    view?.evaluateJavascript(adBlockJS, null)
+                    // Inject both scripts
+                    view?.evaluateJavascript(superBackgroundJS, null)
+                    view?.evaluateJavascript(superAdBlockJS, null)
+                    
+                    // Re-inject after 2 seconds for safety
+                    view?.postDelayed({
+                        view.evaluateJavascript(superAdBlockJS, null)
+                    }, 2000)
                 }
-                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?) = false
+                
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    view?.loadUrl(request?.url.toString())
+                    return true
+                }
             }
 
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    if (newProgress >= 50) view?.evaluateJavascript(adBlockJS, null)
+                    if (newProgress >= 80) {
+                        view?.evaluateJavascript(superAdBlockJS, null)
+                    }
                 }
             }
 
@@ -156,21 +259,26 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // CRITICAL — don't pause WebView when app goes to background
     override fun onPause() {
         super.onPause()
-        binding.webView.onResume() // keep it alive!
+        // Keep WebView alive!
+        binding.webView.onResume()
+        // Re-inject background script
+        binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
 
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(backgroundPlayJS, null)
+        binding.webView.evaluateJavascript(superBackgroundJS, null)
+        binding.webView.evaluateJavascript(superAdBlockJS, null)
     }
 
     override fun onStop() {
         super.onStop()
-        binding.webView.onResume() // still keep alive
+        // CRITICAL: Don't pause WebView
+        binding.webView.onResume()
+        binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
