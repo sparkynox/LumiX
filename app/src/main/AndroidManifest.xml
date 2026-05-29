@@ -30,8 +30,9 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:launchMode="singleTop" />
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:launchMode="singleTop"
+            android:screenOrientation="unspecified" />
 
         <activity
             android:name=".ui.SettingsActivity"
@@ -39,8 +40,10 @@
 
         <service
             android:name=".service.PlayerService"
+            android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false" />
 
     </application>
 
