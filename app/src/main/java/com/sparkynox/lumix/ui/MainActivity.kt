@@ -24,7 +24,6 @@ class MainActivity : AppCompatActivity() {
 
     private val backgroundJS = """
         (function() {
-            // Trick YouTube — page is always visible
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
 
@@ -33,7 +32,6 @@ class MainActivity : AppCompatActivity() {
             window.addEventListener('blur', block, true);
             window.addEventListener('pagehide', block, true);
 
-            // Auto-resume if YouTube pauses (only real video, not ad)
             setInterval(() => {
                 const video = document.querySelector('video');
                 const isAd = document.querySelector('.ad-showing');
@@ -46,71 +44,72 @@ class MainActivity : AppCompatActivity() {
 
     private val adBlockJS = """
         (function() {
-            const killAds = () => {
-                [
-                    '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
-                    '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
-                    '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer',
-                    '#masthead-ad', '.ad-container', 'ytd-banner-promo-renderer'
-                ].forEach(sel => {
-                    document.querySelectorAll(sel).forEach(el => {
-                        try { el.remove(); el.style.display = 'none'; } catch(e) {}
-                    });
-                });
-            };
-
-            const muteAd = () => {
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
-                if (video) {
-                    if (isAd) {
-                        video.muted = true;
-                        video.volume = 0;
-                        // Try skip by jumping to end
-                        if (video.duration && !isNaN(video.duration)) {
-                            try { video.currentTime = video.duration; } catch(e) {}
-                        }
-                    } else {
-                        video.muted = false;
-                        video.volume = 1;
-                    }
-                }
-            };
-
-            const skipAd = () => {
-                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
-                    if (btn.offsetParent !== null) btn.click();
-                });
-            };
-
-            // CSS nuke
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
                 .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
                 .ytd-display-ad-renderer, .ytp-ad-overlay-container,
-                ytd-ad-slot-renderer, #masthead-ad {
+                ytd-ad-slot-renderer, #masthead-ad, .ytp-ad-progress-list,
+                .ytp-ad-action-interstitial, .ytp-ad-skip-button-container,
+                .ytp-ad-feedback-dialog-container, ytd-banner-promo-renderer,
+                ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer,
+                .ytd-promoted-sparkles-web-renderer {
                     display: none !important;
                     visibility: hidden !important;
+                    opacity: 0 !important;
                     height: 0 !important;
+                    width: 0 !important;
+                    pointer-events: none !important;
                 }
             `;
             if (document.head) document.head.appendChild(style);
 
-            // requestAnimationFrame loop — smooth and fast
+            function handleAd() {
+                const isAd = !!document.querySelector('.ad-showing');
+                const video = document.querySelector('video');
+                if (!video) return;
+
+                if (isAd) {
+                    video.muted = true;
+                    video.volume = 0;
+
+                    document.querySelectorAll(
+                        '.ytp-ad-player-overlay, .ytp-ad-module, .video-ads'
+                    ).forEach(el => {
+                        el.style.setProperty('display', 'none', 'important');
+                    });
+
+                    document.querySelectorAll(
+                        '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[class*="skip"]'
+                    ).forEach(btn => {
+                        try { btn.click(); } catch(e) {}
+                    });
+
+                    // 16x speed — ad instantly finishes
+                    try {
+                        if (video.playbackRate < 16) video.playbackRate = 16;
+                    } catch(e) {}
+
+                } else {
+                    if (video.muted) video.muted = false;
+                    if (video.volume < 1) video.volume = 1;
+                    try {
+                        if (video.playbackRate !== 1) video.playbackRate = 1;
+                    } catch(e) {}
+                }
+            }
+
             let last = 0;
             function loop(t) {
-                if (t - last > 200) {
-                    killAds(); muteAd(); skipAd();
+                if (t - last > 150) {
+                    handleAd();
                     last = t;
                 }
                 requestAnimationFrame(loop);
             }
             requestAnimationFrame(loop);
 
-            new MutationObserver(() => { killAds(); skipAd(); })
+            new MutationObserver(() => handleAd())
                 .observe(document.body, { childList: true, subtree: true });
         })();
     """.trimIndent()
@@ -121,7 +120,6 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Keep screen + CPU alive
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         acquireWakeLock()
         setupWebView()
@@ -160,10 +158,8 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // Background JS first — then ad block
                     view?.evaluateJavascript(backgroundJS, null)
                     view?.evaluateJavascript(adBlockJS, null)
-                    // Inject again after 2s — YouTube lazy loads stuff
                     view?.postDelayed({
                         view.evaluateJavascript(backgroundJS, null)
                         view.evaluateJavascript(adBlockJS, null)
@@ -180,7 +176,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             webChromeClient = object : WebChromeClient() {
-                // Fullscreen video support
                 override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                     customView = view
                     customViewCallback = callback
@@ -220,7 +215,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // CRITICAL — never let WebView pause
     override fun onPause() {
         super.onPause()
         binding.webView.onResume()
