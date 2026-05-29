@@ -24,26 +24,47 @@ class MainActivity : AppCompatActivity() {
 
     private val backgroundJS = """
         (function() {
-            Object.defineProperty(document, 'hidden', { get: () => false });
-            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            if (window._lumiXBgDone) return;
+            window._lumiXBgDone = true;
+
+            // Always visible
+            try {
+                Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+                Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+            } catch(e) {}
 
             const block = (e) => { e.stopImmediatePropagation(); e.preventDefault(); };
             document.addEventListener('visibilitychange', block, true);
+            document.addEventListener('webkitvisibilitychange', block, true);
             window.addEventListener('blur', block, true);
             window.addEventListener('pagehide', block, true);
+            window.addEventListener('freeze', block, true);
 
+            // Keep video alive every 300ms
             setInterval(() => {
                 const video = document.querySelector('video');
                 const isAd = document.querySelector('.ad-showing');
                 if (video && !isAd && video.paused && video.currentTime > 0 && !video.ended) {
                     video.play().catch(() => {});
                 }
-            }, 500);
+            }, 300);
+
+            // Prevent YouTube from pausing on visibility change
+            document.addEventListener('pause', (e) => {
+                const video = e.target;
+                const isAd = document.querySelector('.ad-showing');
+                if (video && video.tagName === 'VIDEO' && !isAd) {
+                    setTimeout(() => { video.play().catch(() => {}); }, 100);
+                }
+            }, true);
         })();
     """.trimIndent()
 
     private val adBlockJS = """
         (function() {
+            if (window._lumiXAdDone) return;
+            window._lumiXAdDone = true;
+
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
@@ -62,12 +83,10 @@ class MainActivity : AppCompatActivity() {
                     width: 0 !important;
                     pointer-events: none !important;
                 }
-
                 .ad-showing video {
                     opacity: 0 !important;
                     pointer-events: none !important;
                 }
-
                 .ad-showing .html5-video-container {
                     background: #000 !important;
                 }
@@ -80,35 +99,62 @@ class MainActivity : AppCompatActivity() {
                 if (!video) return;
 
                 if (isAd) {
+                    // Mute + hide
                     video.muted = true;
                     video.volume = 0;
-                    try { video.playbackRate = 16; } catch(e) {}
                     video.style.setProperty('opacity', '0', 'important');
                     video.style.setProperty('pointer-events', 'none', 'important');
 
+                    // Max speed — keep hammering it
+                    try {
+                        if (video.playbackRate < 16) video.playbackRate = 16;
+                    } catch(e) {}
+
+                    // Force playbackRate via property override
+                    try {
+                        Object.defineProperty(video, 'playbackRate', {
+                            get: () => 16,
+                            set: () => {},
+                            configurable: true
+                        });
+                    } catch(e) {}
+
+                    // Click skip
                     document.querySelectorAll(
                         '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[class*="skip"]'
                     ).forEach(btn => { try { btn.click(); } catch(e) {} });
 
+                    // Hide ad containers
                     document.querySelectorAll(
                         '.ytp-ad-player-overlay, .ytp-ad-module, .video-ads, .ytp-ad-overlay-container'
                     ).forEach(el => el.style.setProperty('display', 'none', 'important'));
 
                 } else {
+                    // Restore for real video
+                    try {
+                        Object.defineProperty(video, 'playbackRate', {
+                            get: () => video._realRate || 1,
+                            set: (v) => { video._realRate = v; },
+                            configurable: true
+                        });
+                    } catch(e) {}
                     video.muted = false;
                     video.volume = 1;
                     video.style.removeProperty('opacity');
                     video.style.removeProperty('pointer-events');
-                    try { video.playbackRate = 1; } catch(e) {}
+                    try {
+                        if (video.playbackRate !== 1) video.playbackRate = 1;
+                    } catch(e) {}
                 }
             }
 
+            // Hammer every 100ms via setInterval — more reliable than rAF when screen off
+            setInterval(() => { handleAd(); }, 100);
+
+            // Also rAF for when screen on
             let last = 0;
             function loop(t) {
-                if (t - last > 100) {
-                    handleAd();
-                    last = t;
-                }
+                if (t - last > 100) { handleAd(); last = t; }
                 requestAnimationFrame(loop);
             }
             requestAnimationFrame(loop);
@@ -118,6 +164,13 @@ class MainActivity : AppCompatActivity() {
 
             document.addEventListener('play', handleAd, true);
             document.addEventListener('playing', handleAd, true);
+            document.addEventListener('ratechange', () => {
+                const video = document.querySelector('video');
+                const isAd = document.querySelector('.ad-showing');
+                if (video && isAd && video.playbackRate < 16) {
+                    try { video.playbackRate = 16; } catch(e) {}
+                }
+            }, true);
         })();
     """.trimIndent()
 
@@ -165,19 +218,17 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(backgroundJS, null)
-                    view?.evaluateJavascript(adBlockJS, null)
-                    view?.postDelayed({
-                        view.evaluateJavascript(backgroundJS, null)
-                        view.evaluateJavascript(adBlockJS, null)
-                    }, 2000)
+                    injectAll(view)
+                    // Re-inject after 1s, 3s, 5s — YouTube lazy loads
+                    view?.postDelayed({ injectAll(view) }, 1000)
+                    view?.postDelayed({ injectAll(view) }, 3000)
+                    view?.postDelayed({ injectAll(view) }, 5000)
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val url = request?.url?.toString() ?: return false
                     return if (url.contains("youtube.com") || url.contains("youtu.be")) {
-                        view?.loadUrl(url)
-                        true
+                        view?.loadUrl(url); true
                     } else false
                 }
             }
@@ -210,6 +261,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun injectAll(view: WebView?) {
+        view?.evaluateJavascript(backgroundJS, null)
+        view?.evaluateJavascript(adBlockJS, null)
+    }
+
     private fun setupButtons() {
         binding.btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
@@ -225,17 +281,20 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         binding.webView.onResume()
+        // Re-inject when going to background
+        injectAll(binding.webView)
     }
 
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(backgroundJS, null)
+        injectAll(binding.webView)
     }
 
     override fun onStop() {
         super.onStop()
         binding.webView.onResume()
+        injectAll(binding.webView)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
