@@ -15,23 +15,50 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 FIX POPUP - Block "Leave page" dialog
-    private val fixNavigationJS = """
+    // 🔥 REMOVE ALL POPUPS/DIALOGS
+    private val removeDialogsJS = """
         (function() {
-            window.addEventListener('beforeunload', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                delete e.returnValue;
+            const removeDialogs = () => {
+                const selectors = [
+                    '.yt-dialog', '.yt-confirm-dialog', '#dialog',
+                    '.style-scope.ytd-modal-with-title-and-button-renderer',
+                    'tp-yt-paper-dialog', '.modal', '[role="dialog"]',
+                    '.ytd-modal-with-title-and-button-renderer'
+                ];
+                
+                selectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(d => {
+                        d.remove();
+                        d.style.display = 'none';
+                    });
+                });
+                
+                // Auto-click leave button if exists
+                const btns = document.querySelectorAll('#leave-button, #stay-button, button');
+                btns.forEach(btn => {
+                    if (btn.innerText === 'LEAVE' || btn.innerText === 'STAY' || 
+                        btn.innerText === 'Leave' || btn.innerText === 'Stay') {
+                        btn.click();
+                    }
+                });
+            };
+            
+            removeDialogs();
+            window.confirm = () => true;
+            window.alert = () => true;
+            
+            new MutationObserver(() => removeDialogs()).observe(document.body, { 
+                childList: true, subtree: true 
             });
-            window.confirm = function() { return true; };
-            console.log('Popup fixed');
+            
+            console.log('✅ Dialog remover active');
         })();
     """.trimIndent()
 
     // 🔥 SUPER AD BLOCKER
     private val superAdBlockJS = """
         (function() {
-            console.log('🔥 LumiX Super Ad Blocker Active');
+            console.log('🔥 LumiX Ad Blocker Active');
             
             const killAllAds = () => {
                 const selectors = [
@@ -40,18 +67,13 @@ class MainActivity : AppCompatActivity() {
                     '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
                     '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
                     '.ytp-ad-overlay-container', '.ytp-ad-skip-button-container',
-                    'ytd-ad-slot-renderer', '#masthead-ad', '.ad-container',
-                    '[class*="-ad-"]', '[id*="-ad-"]'
+                    'ytd-ad-slot-renderer', '#masthead-ad', '.ad-container'
                 ];
                 
                 selectors.forEach(sel => {
                     document.querySelectorAll(sel).forEach(ad => {
-                        try {
-                            ad.remove();
-                            ad.style.display = 'none';
-                            ad.style.visibility = 'hidden';
-                            ad.style.height = '0px';
-                        } catch(e) {}
+                        ad.remove();
+                        ad.style.display = 'none';
                     });
                 });
             };
@@ -59,14 +81,10 @@ class MainActivity : AppCompatActivity() {
             const controlAudio = () => {
                 const video = document.querySelector('video');
                 const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
-                
                 if (video) {
                     if (isAd) {
                         video.muted = true;
                         video.volume = 0;
-                        if (video.duration && video.duration < 30 && video.duration > 0) {
-                            video.currentTime = video.duration;
-                        }
                     } else if (!video.muted && !video.paused) {
                         video.muted = false;
                         video.volume = 1;
@@ -75,7 +93,7 @@ class MainActivity : AppCompatActivity() {
             };
             
             const clickSkip = () => {
-                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern').forEach(btn => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
                     if (btn.offsetParent !== null) btn.click();
                 });
             };
@@ -88,7 +106,6 @@ class MainActivity : AppCompatActivity() {
                     display: none !important;
                     visibility: hidden !important;
                     height: 0px !important;
-                    opacity: 0 !important;
                 }
             `;
             document.head.appendChild(style);
@@ -108,14 +125,14 @@ class MainActivity : AppCompatActivity() {
             new MutationObserver(() => { killAllAds(); clickSkip(); })
                 .observe(document.body, { childList: true, subtree: true });
                 
-            console.log('✅ LumiX Ad Blocker Ready');
+            console.log('✅ Ad Blocker Ready');
         })();
     """.trimIndent()
 
-    // 🔥 BACKGROUND PLAY - Never stops
+    // 🔥 BACKGROUND PLAY
     private val superBackgroundJS = """
         (function() {
-            console.log('🎵 LumiX Background Player Active');
+            console.log('🎵 Background Player Active');
             
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
@@ -127,30 +144,19 @@ class MainActivity : AppCompatActivity() {
             };
             
             document.addEventListener('visibilitychange', blockEvent, true);
-            document.addEventListener('webkitvisibilitychange', blockEvent, true);
             window.addEventListener('blur', blockEvent, true);
             window.addEventListener('pagehide', blockEvent, true);
-            window.addEventListener('beforeunload', blockEvent, true);
             
             const keepPlaying = () => {
                 const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
-                if (video && !isAd && video.paused && !video.ended && video.currentTime > 0) {
-                    video.play().catch(e => console.log('Play blocked:', e));
+                const isAd = document.querySelector('.ad-showing');
+                if (video && !isAd && video.paused && video.currentTime > 0) {
+                    video.play().catch(() => {});
                 }
             };
             
-            if (document.querySelector('video')) {
-                const originalPause = video.pause;
-                video.pause = function() {
-                    const isAd = document.querySelector('.ad-showing');
-                    if (!isAd) return;
-                    return originalPause.call(this);
-                };
-            }
-            
             setInterval(keepPlaying, 500);
-            console.log('✅ LumiX Background Player Ready');
+            console.log('✅ Background Player Ready');
         })();
     """.trimIndent()
 
@@ -168,10 +174,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun acquireWakeLock() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "LumiX::BackgroundPlay"
-        )
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LumiX::BackgroundPlay")
         wakeLock?.acquire(12 * 60 * 60 * 1000L)
     }
 
@@ -181,36 +184,28 @@ class MainActivity : AppCompatActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                databaseEnabled = true
                 mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
                 builtInZoomControls = true
                 displayZoomControls = false
-                
-                // 🔥 MOBILE USER AGENT - Fix desktop site issue
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
-                allowContentAccess = true
-                allowFileAccess = true
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // Inject all scripts in correct order
-                    view?.evaluateJavascript(fixNavigationJS, null)      // Fix popup first
-                    view?.evaluateJavascript(superBackgroundJS, null)    // Then background
-                    view?.evaluateJavascript(superAdBlockJS, null)       // Then ad blocker
+                    // Inject all scripts
+                    view?.evaluateJavascript(removeDialogsJS, null)
+                    view?.evaluateJavascript(superBackgroundJS, null)
+                    view?.evaluateJavascript(superAdBlockJS, null)
                     
-                    // Re-inject after 2 seconds for safety
                     view?.postDelayed({
-                        view?.evaluateJavascript(superAdBlockJS, null)
-                        view?.evaluateJavascript(superBackgroundJS, null)
-                    }, 2000)
+                        view?.evaluateJavascript(removeDialogsJS, null)
+                    }, 1000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -222,12 +217,11 @@ class MainActivity : AppCompatActivity() {
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     if (newProgress >= 80) {
-                        view?.evaluateJavascript(superAdBlockJS, null)
+                        view?.evaluateJavascript(removeDialogsJS, null)
                     }
                 }
             }
 
-            // Load mobile YouTube
             loadUrl("https://m.youtube.com")
         }
     }
@@ -247,20 +241,18 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
 
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
+        binding.webView.evaluateJavascript(removeDialogsJS, null)
         binding.webView.evaluateJavascript(superBackgroundJS, null)
-        binding.webView.evaluateJavascript(superAdBlockJS, null)
     }
 
     override fun onStop() {
         super.onStop()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
