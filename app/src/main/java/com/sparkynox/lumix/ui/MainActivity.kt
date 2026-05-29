@@ -15,148 +15,107 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 REMOVE ALL POPUPS/DIALOGS
     private val removeDialogsJS = """
         (function() {
             const removeDialogs = () => {
-                const selectors = [
-                    '.yt-dialog', '.yt-confirm-dialog', '#dialog',
-                    '.style-scope.ytd-modal-with-title-and-button-renderer',
-                    'tp-yt-paper-dialog', '.modal', '[role="dialog"]',
-                    '.ytd-modal-with-title-and-button-renderer'
-                ];
-                
+                const selectors = ['.yt-dialog', '.yt-confirm-dialog', '#dialog', '.modal', '[role="dialog"]', 'tp-yt-paper-dialog'];
                 selectors.forEach(sel => {
-                    document.querySelectorAll(sel).forEach(d => {
-                        d.remove();
-                        d.style.display = 'none';
-                    });
+                    document.querySelectorAll(sel).forEach(d => { d.remove(); d.style.display = 'none'; });
                 });
-                
-                // Auto-click leave button if exists
-                const btns = document.querySelectorAll('#leave-button, #stay-button, button');
-                btns.forEach(btn => {
-                    if (btn.innerText === 'LEAVE' || btn.innerText === 'STAY' || 
-                        btn.innerText === 'Leave' || btn.innerText === 'Stay') {
-                        btn.click();
-                    }
+                document.querySelectorAll('button').forEach(btn => {
+                    if (btn.innerText === 'LEAVE' || btn.innerText === 'STAY') btn.click();
                 });
             };
-            
             removeDialogs();
             window.confirm = () => true;
             window.alert = () => true;
-            
-            new MutationObserver(() => removeDialogs()).observe(document.body, { 
-                childList: true, subtree: true 
-            });
-            
-            console.log('✅ Dialog remover active');
+            new MutationObserver(() => removeDialogs()).observe(document.body, { childList: true, subtree: true });
         })();
     """.trimIndent()
 
-    // 🔥 SUPER AD BLOCKER
     private val superAdBlockJS = """
         (function() {
-            console.log('🔥 LumiX Ad Blocker Active');
+            console.log('🔥 LumiX ULTIMATE Ad Blocker');
             
-            const killAllAds = () => {
-                const selectors = [
-                    '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
-                    '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
-                    '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                    '.ytp-ad-overlay-container', '.ytp-ad-skip-button-container',
-                    'ytd-ad-slot-renderer', '#masthead-ad', '.ad-container'
-                ];
-                
-                selectors.forEach(sel => {
-                    document.querySelectorAll(sel).forEach(ad => {
+            const adSelectors = [
+                '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
+                '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
+                '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
+                '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
+                '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer', '#masthead-ad',
+                '.ytp-ad-skip-button-container', 'ytd-in-feed-ad-layout-renderer',
+                '[aria-label*="Ad"]', '[aria-label*="Sponsored"]'
+            ];
+            
+            const removeAllAds = () => {
+                adSelectors.forEach(selector => {
+                    document.querySelectorAll(selector).forEach(ad => {
                         ad.remove();
                         ad.style.display = 'none';
+                        ad.style.visibility = 'hidden';
                     });
                 });
             };
             
-            const controlAudio = () => {
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
-                if (video) {
-                    if (isAd) {
-                        video.muted = true;
-                        video.volume = 0;
-                    } else if (!video.muted && !video.paused) {
-                        video.muted = false;
-                        video.volume = 1;
-                    }
-                }
-            };
-            
-            const clickSkip = () => {
+            const forceSkipAd = () => {
                 document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
                     if (btn.offsetParent !== null) btn.click();
                 });
             };
             
-            const style = document.createElement('style');
-            style.textContent = `
-                .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
-                .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
-                .ytd-display-ad-renderer, .ytp-ad-overlay-container {
-                    display: none !important;
-                    visibility: hidden !important;
-                    height: 0px !important;
+            let adActive = false;
+            
+            const handleAudio = () => {
+                const video = document.querySelector('video');
+                const isAdPlaying = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                
+                if (video) {
+                    if (isAdPlaying) {
+                        if (!adActive) {
+                            video.muted = true;
+                            adActive = true;
+                        }
+                    } else if (adActive) {
+                        video.muted = false;
+                        adActive = false;
+                        console.log('Sound restored');
+                    }
                 }
-            `;
+            };
+            
+            const style = document.createElement('style');
+            style.textContent = `${adSelectors.map(s => `${s}{display:none!important;visibility:hidden!important;height:0!important;}`).join('')}`;
             document.head.appendChild(style);
             
-            let last = 0;
-            function loop(time) {
-                if (time - last > 200) {
-                    killAllAds();
-                    controlAudio();
-                    clickSkip();
-                    last = time;
-                }
-                requestAnimationFrame(loop);
-            }
-            requestAnimationFrame(loop);
+            setInterval(() => {
+                removeAllAds();
+                forceSkipAd();
+                handleAudio();
+            }, 300);
             
-            new MutationObserver(() => { killAllAds(); clickSkip(); })
+            new MutationObserver(() => { removeAllAds(); forceSkipAd(); handleAudio(); })
                 .observe(document.body, { childList: true, subtree: true });
                 
             console.log('✅ Ad Blocker Ready');
         })();
     """.trimIndent()
 
-    // 🔥 BACKGROUND PLAY
     private val superBackgroundJS = """
         (function() {
-            console.log('🎵 Background Player Active');
-            
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
             
-            const blockEvent = (e) => {
-                e.stopImmediatePropagation();
-                e.preventDefault();
-                return false;
-            };
-            
+            const blockEvent = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
             document.addEventListener('visibilitychange', blockEvent, true);
             window.addEventListener('blur', blockEvent, true);
-            window.addEventListener('pagehide', blockEvent, true);
             
-            const keepPlaying = () => {
+            setInterval(() => {
                 const video = document.querySelector('video');
                 const isAd = document.querySelector('.ad-showing');
                 if (video && !isAd && video.paused && video.currentTime > 0) {
                     video.play().catch(() => {});
                 }
-            };
-            
-            setInterval(keepPlaying, 500);
-            console.log('✅ Background Player Ready');
+            }, 500);
         })();
     """.trimIndent()
 
@@ -192,33 +151,19 @@ class MainActivity : AppCompatActivity() {
                 displayZoomControls = false
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                cacheMode = WebSettings.LOAD_DEFAULT
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // Inject all scripts
                     view?.evaluateJavascript(removeDialogsJS, null)
                     view?.evaluateJavascript(superBackgroundJS, null)
                     view?.evaluateJavascript(superAdBlockJS, null)
-                    
-                    view?.postDelayed({
-                        view?.evaluateJavascript(removeDialogsJS, null)
-                    }, 1000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     view?.loadUrl(request?.url.toString())
                     return true
-                }
-            }
-
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    if (newProgress >= 80) {
-                        view?.evaluateJavascript(removeDialogsJS, null)
-                    }
                 }
             }
 
@@ -245,13 +190,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        binding.webView.onResume()
-        binding.webView.evaluateJavascript(removeDialogsJS, null)
-        binding.webView.evaluateJavascript(superBackgroundJS, null)
-    }
-
-    override fun onStop() {
-        super.onStop()
         binding.webView.onResume()
     }
 
