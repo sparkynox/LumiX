@@ -16,66 +16,60 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 LIGHTWEIGHT VERSION - Search working + Background Play
-    private val lightweightJS = """
+    // 🔥 SIRF AD HIDE - Background play ko touch nahi karega
+    private val adHideOnlyJS = """
         (function() {
-            console.log('🔥 LumiX Lightweight Mode');
+            console.log('🔥 LumiX - Ad Hide Mode Only');
             
-            // ========== AD BLOCK (Lightweight) ==========
-            const removeAds = () => {
+            // Sirf ad elements hide karo
+            const hideAds = () => {
                 const adSelectors = [
-                    '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
-                    '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
-                    '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer'
+                    '.video-ads',
+                    '.ytp-ad-module', 
+                    '.ytp-ad-player-overlay',
+                    '.ytp-ad-image-overlay', 
+                    '.ytp-ad-text-overlay',
+                    '#player-ads',
+                    '.ytd-display-ad-renderer',
+                    '.ytd-promoted-video-renderer',
+                    '.ytp-ad-overlay-container',
+                    'ytd-ad-slot-renderer',
+                    '.ytp-ad-progress-list',
+                    '.ytp-ad-action-interstitial',
+                    '.ytd-banner-promo-renderer',
+                    '[aria-label*="Ad"]',
+                    '.ytp-ad-simple-ad-badge'
                 ];
+                
                 adSelectors.forEach(sel => {
                     document.querySelectorAll(sel).forEach(ad => {
-                        if (ad) ad.style.display = 'none';
+                        try {
+                            ad.style.display = 'none';
+                            ad.style.visibility = 'hidden';
+                            ad.style.height = '0px';
+                            ad.style.width = '0px';
+                            ad.style.opacity = '0';
+                        } catch(e) {}
                     });
                 });
-            };
-            
-            const skipAds = () => {
+                
+                // Skip button bhi click kar do
                 document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
-                    if (btn && btn.offsetParent !== null) btn.click();
+                    if (btn.offsetParent !== null) btn.click();
                 });
             };
             
-            let adActive = false;
-            const handleAudio = () => {
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
-                if (video) {
-                    if (isAd && !adActive) {
-                        video.muted = true;
-                        adActive = true;
-                    } else if (!isAd && adActive) {
-                        video.muted = false;
-                        adActive = false;
-                    }
-                }
-            };
+            // Background play ke liye kuch mat kar, sirf ad hide kar
+            setInterval(hideAds, 300);
             
-            // ========== BACKGROUND PLAY ==========
-            Object.defineProperty(document, 'hidden', { get: () => false });
-            Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+            new MutationObserver(hideAds).observe(document.body, { 
+                childList: true, 
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['class', 'style']
+            });
             
-            setInterval(() => {
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing');
-                if (video && !isAd && video.paused && video.currentTime > 0) {
-                    video.play().catch(() => {});
-                }
-            }, 500);
-            
-            setInterval(() => {
-                removeAds();
-                skipAds();
-                handleAudio();
-            }, 300);
-            
-            console.log('✅ LumiX Active - Search Working');
+            console.log('✅ Ad Hide Mode - Background Play Intact');
         })();
     """.trimIndent()
 
@@ -109,57 +103,30 @@ class MainActivity : AppCompatActivity() {
                 setSupportZoom(true)
                 builtInZoomControls = true
                 displayZoomControls = false
-                
-                // 🔥 CRITICAL: Real mobile user agent
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
-                
-                // These help with search
-                setRenderPriority(WebSettings.RenderPriority.HIGH)
-                blockNetworkImage = false
-                blockNetworkLoads = false
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(lightweightJS, null)
+                    view?.evaluateJavascript(adHideOnlyJS, null)
+                    // Har 5 seconds mein re-inject
                     view?.postDelayed({
-                        view?.evaluateJavascript(lightweightJS, null)
+                        view?.evaluateJavascript(adHideOnlyJS, null)
                     }, 2000)
+                    view?.postDelayed({
+                        view?.evaluateJavascript(adHideOnlyJS, null)
+                    }, 5000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    val url = request?.url.toString()
-                    if (url.startsWith("https://m.youtube.com")) {
-                        view?.loadUrl(url)
-                        return true
-                    }
-                    return false
-                }
-                
-                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
-                    super.onReceivedError(view, errorCode, description, failingUrl)
-                    if (errorCode == ERROR_TIMEOUT || errorCode == ERROR_CONNECT) {
-                        view?.reload()
-                    }
+                    view?.loadUrl(request?.url.toString())
+                    return true
                 }
             }
 
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    if (newProgress == 100) {
-                        view?.evaluateJavascript(lightweightJS, null)
-                    }
-                }
-            }
-
-            // Clear cache to avoid invalid responses
-            clearCache(true)
-            clearHistory()
-            
             loadUrl("https://m.youtube.com")
         }
     }
@@ -184,6 +151,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
+        binding.webView.evaluateJavascript(adHideOnlyJS, null)
     }
 
     override fun onStop() {
