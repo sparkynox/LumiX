@@ -16,66 +16,36 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 WORKING AD BLOCKER + BACKGROUND PLAY
-    private val workingJS = """
+    // 🔥 LIGHTWEIGHT VERSION - Search working + Background Play
+    private val lightweightJS = """
         (function() {
-            console.log('🔥 LumiX - AD BLOCK + BACKGROUND ACTIVE');
+            console.log('🔥 LumiX Lightweight Mode');
             
-            // ========== AD BLOCKER ==========
-            // Block ad requests
-            const originalFetch = window.fetch;
-            window.fetch = function(url, options) {
-                if (url && (url.includes('googleads') || url.includes('doubleclick') || 
-                    url.includes('pagead') || url.includes('ad.doubleclick'))) {
-                    console.log('Blocked ad fetch:', url);
-                    return Promise.reject(new Error('Ad blocked'));
-                }
-                return originalFetch.apply(this, arguments);
-            };
-            
-            // Block XHR ad requests
-            const XHR = XMLHttpRequest.prototype;
-            const originalOpen = XHR.open;
-            XHR.open = function(method, url) {
-                if (url && (url.includes('googleads') || url.includes('doubleclick') || 
-                    url.includes('pagead') || url.includes('adservice'))) {
-                    this._blocked = true;
-                    return;
-                }
-                return originalOpen.apply(this, arguments);
-            };
-            
-            // Remove ad elements continuously
+            // ========== AD BLOCK (Lightweight) ==========
             const removeAds = () => {
                 const adSelectors = [
                     '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
                     '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
                     '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer',
-                    '#masthead-ad', '.ytd-banner-promo-renderer'
+                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer'
                 ];
                 adSelectors.forEach(sel => {
                     document.querySelectorAll(sel).forEach(ad => {
-                        if (ad && ad.remove) ad.remove();
                         if (ad) ad.style.display = 'none';
                     });
                 });
             };
             
-            // Auto-skip video ads
             const skipAds = () => {
-                const skipBtns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern');
-                skipBtns.forEach(btn => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
                     if (btn && btn.offsetParent !== null) btn.click();
                 });
             };
             
-            // Mute ads only
             let adActive = false;
-            const handleAdAudio = () => {
+            const handleAudio = () => {
                 const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
                 if (video) {
                     if (isAd && !adActive) {
                         video.muted = true;
@@ -88,45 +58,24 @@ class MainActivity : AppCompatActivity() {
             };
             
             // ========== BACKGROUND PLAY ==========
-            // Fake visibility
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
             
-            // Block visibility events
-            ['visibilitychange', 'webkitvisibilitychange', 'blur', 'pagehide'].forEach(event => {
-                document.addEventListener(event, (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                }, true);
-                window.addEventListener(event, (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                }, true);
-            });
-            
-            // Force video to keep playing
             setInterval(() => {
                 const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
+                const isAd = document.querySelector('.ad-showing');
                 if (video && !isAd && video.paused && video.currentTime > 0) {
                     video.play().catch(() => {});
                 }
             }, 500);
             
-            // ========== RUN ALL ==========
             setInterval(() => {
                 removeAds();
                 skipAds();
-                handleAdAudio();
-            }, 200);
+                handleAudio();
+            }, 300);
             
-            new MutationObserver(() => {
-                removeAds();
-                skipAds();
-                handleAdAudio();
-            }).observe(document.body, { childList: true, subtree: true });
-            
-            console.log('✅ LumiX - Ads Blocked + Background Play Active');
+            console.log('✅ LumiX Active - Search Working');
         })();
     """.trimIndent()
 
@@ -161,30 +110,56 @@ class MainActivity : AppCompatActivity() {
                 builtInZoomControls = true
                 displayZoomControls = false
                 
-                // 🔥 MOBILE USER AGENT - Fix desktop site
+                // 🔥 CRITICAL: Real mobile user agent
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                 
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
+                
+                // These help with search
+                setRenderPriority(WebSettings.RenderPriority.HIGH)
+                blockNetworkImage = false
+                blockNetworkLoads = false
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(workingJS, null)
-                    // Keep injecting
+                    view?.evaluateJavascript(lightweightJS, null)
                     view?.postDelayed({
-                        view?.evaluateJavascript(workingJS, null)
+                        view?.evaluateJavascript(lightweightJS, null)
                     }, 2000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    view?.loadUrl(request?.url.toString())
-                    return true
+                    val url = request?.url.toString()
+                    if (url.startsWith("https://m.youtube.com")) {
+                        view?.loadUrl(url)
+                        return true
+                    }
+                    return false
+                }
+                
+                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                    super.onReceivedError(view, errorCode, description, failingUrl)
+                    if (errorCode == ERROR_TIMEOUT || errorCode == ERROR_CONNECT) {
+                        view?.reload()
+                    }
                 }
             }
 
-            // Force mobile site
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (newProgress == 100) {
+                        view?.evaluateJavascript(lightweightJS, null)
+                    }
+                }
+            }
+
+            // Clear cache to avoid invalid responses
+            clearCache(true)
+            clearHistory()
+            
             loadUrl("https://m.youtube.com")
         }
     }
@@ -204,13 +179,11 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(workingJS, null)
     }
 
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(workingJS, null)
     }
 
     override fun onStop() {
