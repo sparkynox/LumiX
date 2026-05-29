@@ -15,107 +15,67 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    private val removeDialogsJS = """
+    private val ultimateTrickJS = """
         (function() {
-            const removeDialogs = () => {
-                const selectors = ['.yt-dialog', '.yt-confirm-dialog', '#dialog', '.modal', '[role="dialog"]', 'tp-yt-paper-dialog'];
-                selectors.forEach(sel => {
-                    document.querySelectorAll(sel).forEach(d => { d.remove(); d.style.display = 'none'; });
-                });
-                document.querySelectorAll('button').forEach(btn => {
-                    if (btn.innerText === 'LEAVE' || btn.innerText === 'STAY') btn.click();
-                });
-            };
-            removeDialogs();
-            window.confirm = () => true;
-            window.alert = () => true;
-            new MutationObserver(() => removeDialogs()).observe(document.body, { childList: true, subtree: true });
-        })();
-    """.trimIndent()
-
-    private val superAdBlockJS = """
-        (function() {
-            console.log('🔥 LumiX ULTIMATE Ad Blocker');
+            console.log('🎭 LumiX Ultimate Trick Mode');
             
-            const adSelectors = [
-                '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
-                '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
-                '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer', '#masthead-ad',
-                '.ytp-ad-skip-button-container', 'ytd-in-feed-ad-layout-renderer',
-                '[aria-label*="Ad"]', '[aria-label*="Sponsored"]'
-            ];
+            // Trick 1: YouTube ko lage video download hai
+            Object.defineProperty(navigator, 'onLine', { get: () => true });
+            if (navigator.connection) {
+                Object.defineProperty(navigator.connection, 'saveData', { get: () => true });
+            }
             
-            const removeAllAds = () => {
-                adSelectors.forEach(selector => {
-                    document.querySelectorAll(selector).forEach(ad => {
-                        ad.remove();
-                        ad.style.display = 'none';
-                        ad.style.visibility = 'hidden';
-                    });
-                });
-            };
-            
-            const forceSkipAd = () => {
-                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
-                    if (btn.offsetParent !== null) btn.click();
-                });
-            };
-            
-            let adActive = false;
-            
-            const handleAudio = () => {
-                const video = document.querySelector('video');
-                const isAdPlaying = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
-                
-                if (video) {
-                    if (isAdPlaying) {
-                        if (!adActive) {
-                            video.muted = true;
-                            adActive = true;
-                        }
-                    } else if (adActive) {
-                        video.muted = false;
-                        adActive = false;
-                        console.log('Sound restored');
-                    }
+            // Trick 2: Block ad requests
+            const XHR = XMLHttpRequest.prototype;
+            const originalOpen = XHR.open;
+            XHR.open = function(method, url) {
+                if (url && (url.includes('googleads') || url.includes('doubleclick') || 
+                    url.includes('pagead') || url.includes('ad.doubleclick'))) {
+                    this._blocked = true;
+                    return;
                 }
+                return originalOpen.apply(this, arguments);
             };
             
-            const style = document.createElement('style');
-            style.textContent = `${adSelectors.map(s => `${s}{display:none!important;visibility:hidden!important;height:0!important;}`).join('')}`;
-            document.head.appendChild(style);
+            // Trick 3: Fake as YouTube app
+            Object.defineProperty(navigator, 'userAgent', {
+                get: () => 'com.google.android.youtube/19.01.34 (Android 14)'
+            });
             
-            setInterval(() => {
-                removeAllAds();
-                forceSkipAd();
-                handleAudio();
-            }, 300);
-            
-            new MutationObserver(() => { removeAllAds(); forceSkipAd(); handleAudio(); })
-                .observe(document.body, { childList: true, subtree: true });
-                
-            console.log('✅ Ad Blocker Ready');
-        })();
-    """.trimIndent()
-
-    private val superBackgroundJS = """
-        (function() {
+            // Trick 4: Fake visibility
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
             
-            const blockEvent = (e) => { e.stopImmediatePropagation(); e.preventDefault(); return false; };
-            document.addEventListener('visibilitychange', blockEvent, true);
-            window.addEventListener('blur', blockEvent, true);
+            // Trick 5: Hide all ads
+            const style = document.createElement('style');
+            style.textContent = `
+                .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
+                .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
+                .ytd-display-ad-renderer, ytd-ad-slot-renderer,
+                .ytp-ad-overlay-container, .ytd-banner-promo-renderer {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0px !important;
+                }
+            `;
+            document.head.appendChild(style);
             
+            // Trick 6: Auto skip
             setInterval(() => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
+                    if (btn.offsetParent !== null) btn.click();
+                });
                 const video = document.querySelector('video');
                 const isAd = document.querySelector('.ad-showing');
-                if (video && !isAd && video.paused && video.currentTime > 0) {
-                    video.play().catch(() => {});
+                if (video && isAd) {
+                    video.muted = true;
+                    if (video.duration && video.duration < 30) video.currentTime = video.duration;
+                } else if (video && video.muted && !isAd) {
+                    video.muted = false;
                 }
-            }, 500);
+            }, 200);
+            
+            console.log('✅ Trick Mode Active');
         })();
     """.trimIndent()
 
@@ -151,14 +111,16 @@ class MainActivity : AppCompatActivity() {
                 displayZoomControls = false
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                cacheMode = WebSettings.LOAD_DEFAULT
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(removeDialogsJS, null)
-                    view?.evaluateJavascript(superBackgroundJS, null)
-                    view?.evaluateJavascript(superAdBlockJS, null)
+                    view?.evaluateJavascript(ultimateTrickJS, null)
+                    view?.postDelayed({
+                        view?.evaluateJavascript(ultimateTrickJS, null)
+                    }, 2000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
