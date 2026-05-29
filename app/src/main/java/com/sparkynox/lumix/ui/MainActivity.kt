@@ -2,7 +2,6 @@ package com.sparkynox.lumix.ui
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.view.KeyEvent
@@ -16,60 +15,81 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 AD HIDE + AD MUTE ONLY - Background play intact
-    private val adMuteAndHideJS = """
+    // 🔥 100% AD BLOCK + HIDE + MUTE (Video sound intact)
+    private val ultimateAdBlockJS = """
         (function() {
-            console.log('🔥 LumiX - Ad Mute + Hide (Background Play Safe)');
+            console.log('🔥 100% Ad Blocker Active');
             
-            let adActive = false;
-            
-            const handleAd = () => {
-                const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
-                
-                if (video) {
-                    if (isAd && !adActive) {
-                        // Ad aaya - mute karo
-                        video.muted = true;
-                        adActive = true;
-                        console.log('Ad detected - muted');
-                    } else if (!isAd && adActive) {
-                        // Ad khatam - unmute karo
-                        video.muted = false;
-                        adActive = false;
-                        console.log('Ad ended - unmuted');
-                    }
-                }
-            };
-            
-            const hideAdElements = () => {
+            // ===== HIDE ALL ADS =====
+            const hideAllAds = () => {
                 const adSelectors = [
                     '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
                     '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
                     '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer',
                     '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                    '.ytd-banner-promo-renderer', '.ytp-ad-simple-ad-badge'
+                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer',
+                    '.ytp-ad-skip-button-container', '.ytd-banner-promo-renderer',
+                    '.ytp-ad-simple-ad-badge', '.ytp-ad-alert-message',
+                    'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
+                    '#masthead-ad', '.ad-container', '[class*="-ad-"]'
                 ];
                 
                 adSelectors.forEach(sel => {
                     document.querySelectorAll(sel).forEach(ad => {
                         try {
+                            ad.remove();
                             ad.style.display = 'none';
                             ad.style.visibility = 'hidden';
                             ad.style.height = '0px';
                             ad.style.width = '0px';
+                            ad.style.opacity = '0';
                         } catch(e) {}
                     });
                 });
+            };
+            
+            // ===== SKIP ADS AUTOMATICALLY =====
+            const skipAdButtons = () => {
+                const skipSelectors = [
+                    '.ytp-ad-skip-button',
+                    '.ytp-skip-ad-button', 
+                    '.ytp-ad-skip-button-modern',
+                    '.ytp-skip-ad-button__text'
+                ];
                 
-                // Skip button click
-                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
-                    if (btn.offsetParent !== null) btn.click();
+                skipSelectors.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(btn => {
+                        if (btn && btn.offsetParent !== null) {
+                            btn.click();
+                            console.log('Skipped ad');
+                        }
+                    });
                 });
             };
             
-            // CSS injection for instant hide
+            // ===== MUTE ONLY ADS, VIDEO SOUND INTACT =====
+            let adPlaying = false;
+            
+            const muteAdsOnly = () => {
+                const video = document.querySelector('video');
+                const isAdActive = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                
+                if (video) {
+                    if (isAdActive && !adPlaying) {
+                        // Ad started - mute
+                        video.muted = true;
+                        adPlaying = true;
+                        console.log('Ad playing - muted');
+                    } else if (!isAdActive && adPlaying) {
+                        // Ad ended - unmute
+                        video.muted = false;
+                        adPlaying = false;
+                        console.log('Ad ended - sound restored');
+                    }
+                }
+            };
+            
+            // ===== CSS INSTANT HIDE =====
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
@@ -79,22 +99,28 @@ class MainActivity : AppCompatActivity() {
                     display: none !important;
                     visibility: hidden !important;
                     height: 0px !important;
+                    width: 0px !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
                 }
             `;
             document.head.appendChild(style);
             
-            // Run everything
+            // ===== RUN EVERYTHING =====
             setInterval(() => {
-                hideAdElements();
-                handleAd();
-            }, 200);
+                hideAllAds();
+                skipAdButtons();
+                muteAdsOnly();
+            }, 150);
             
+            // Watch for new ads
             new MutationObserver(() => {
-                hideAdElements();
-                handleAd();
-            }).observe(document.body, { childList: true, subtree: true });
+                hideAllAds();
+                skipAdButtons();
+                muteAdsOnly();
+            }).observe(document.body, { childList: true, subtree: true, attributes: true });
             
-            console.log('✅ Ad Mute + Hide Active - Background Play Safe');
+            console.log('✅ 100% Ad Block - Hide + Mute, Video sound intact');
         })();
     """.trimIndent()
 
@@ -123,12 +149,13 @@ class MainActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 mediaPlaybackRequiresUserGesture = false
+                setMediaPlaybackRequiresUserGesture(false)
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
                 builtInZoomControls = true
                 displayZoomControls = false
-                userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
             }
@@ -136,10 +163,13 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(adMuteAndHideJS, null)
+                    view?.evaluateJavascript(ultimateAdBlockJS, null)
                     view?.postDelayed({
-                        view?.evaluateJavascript(adMuteAndHideJS, null)
-                    }, 2000)
+                        view?.evaluateJavascript(ultimateAdBlockJS, null)
+                    }, 1000)
+                    view?.postDelayed({
+                        view?.evaluateJavascript(ultimateAdBlockJS, null)
+                    }, 3000)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -172,7 +202,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(adMuteAndHideJS, null)
+        binding.webView.evaluateJavascript(ultimateAdBlockJS, null)
     }
 
     override fun onStop() {
