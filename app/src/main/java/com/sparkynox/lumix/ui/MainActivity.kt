@@ -15,26 +15,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 SUPER CHARGED AD BLOCKER - Full power!
+    // 🔥 FIX POPUP - Block "Leave page" dialog
+    private val fixNavigationJS = """
+        (function() {
+            window.addEventListener('beforeunload', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                delete e.returnValue;
+            });
+            window.confirm = function() { return true; };
+            console.log('Popup fixed');
+        })();
+    """.trimIndent()
+
+    // 🔥 SUPER AD BLOCKER
     private val superAdBlockJS = """
         (function() {
             console.log('🔥 LumiX Super Ad Blocker Active');
             
-            // Kill ALL ads instantly
             const killAllAds = () => {
-                // CSS selectors for all known YouTube ads
                 const selectors = [
                     '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
                     '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
                     '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
                     '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
                     '.ytp-ad-overlay-container', '.ytp-ad-skip-button-container',
-                    'ytd-ad-slot-renderer', 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
-                    '.ytp-ad-simple-ad-badge', '.ytp-ad-advertiser-info',
-                    '#masthead-ad', 'ytd-banner-promo-renderer',
-                    'ytd-video-masthead-ad-v3-renderer', 'ytd-in-feed-ad-layout-renderer',
-                    'ytd-statement-banner-renderer', 'ytd-promoted-sparkles-web-renderer',
-                    '.ad-container', '[class*="-ad-"]', '[id*="-ad-"]'
+                    'ytd-ad-slot-renderer', '#masthead-ad', '.ad-container',
+                    '[class*="-ad-"]', '[id*="-ad-"]'
                 ];
                 
                 selectors.forEach(sel => {
@@ -44,93 +51,75 @@ class MainActivity : AppCompatActivity() {
                             ad.style.display = 'none';
                             ad.style.visibility = 'hidden';
                             ad.style.height = '0px';
-                            ad.style.width = '0px';
                         } catch(e) {}
                     });
                 });
             };
             
-            // Mute ads, unmute real videos
             const controlAudio = () => {
                 const video = document.querySelector('video');
-                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
                 
                 if (video) {
                     if (isAd) {
                         video.muted = true;
                         video.volume = 0;
-                        // Fast forward through ad if possible
                         if (video.duration && video.duration < 30 && video.duration > 0) {
                             video.currentTime = video.duration;
                         }
-                    } else if (!video.muted) {
-                        // Only unmute if video is playing and not an ad
-                        if (!video.paused) {
-                            video.muted = false;
-                            video.volume = 1;
-                        }
+                    } else if (!video.muted && !video.paused) {
+                        video.muted = false;
+                        video.volume = 1;
                     }
                 }
             };
             
-            // Auto skip any ad button
             const clickSkip = () => {
-                const btns = document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button__text');
-                btns.forEach(btn => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern').forEach(btn => {
                     if (btn.offsetParent !== null) btn.click();
                 });
             };
             
-            // Inject CSS to hide ads
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
                 .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
-                .ytd-display-ad-renderer, [class*="-ad-"],
-                .ytp-ad-overlay-container {
+                .ytd-display-ad-renderer, .ytp-ad-overlay-container {
                     display: none !important;
                     visibility: hidden !important;
                     height: 0px !important;
                     opacity: 0 !important;
-                    pointer-events: none !important;
                 }
             `;
             document.head.appendChild(style);
             
-            // Run continuously
             let last = 0;
-            function superLoop(time) {
-                if (time - last > 150) {
+            function loop(time) {
+                if (time - last > 200) {
                     killAllAds();
                     controlAudio();
                     clickSkip();
                     last = time;
                 }
-                requestAnimationFrame(superLoop);
+                requestAnimationFrame(loop);
             }
-            requestAnimationFrame(superLoop);
+            requestAnimationFrame(loop);
             
-            // Watch for new elements
-            const observer = new MutationObserver(() => {
-                killAllAds();
-                clickSkip();
-            });
-            observer.observe(document.body, { childList: true, subtree: true });
-            
-            console.log('✅ LumiX Ultimate Ad Blocker Ready');
+            new MutationObserver(() => { killAllAds(); clickSkip(); })
+                .observe(document.body, { childList: true, subtree: true });
+                
+            console.log('✅ LumiX Ad Blocker Ready');
         })();
     """.trimIndent()
 
-    // 🔥 IMPROVED BACKGROUND PLAY - Never stops!
+    // 🔥 BACKGROUND PLAY - Never stops
     private val superBackgroundJS = """
         (function() {
             console.log('🎵 LumiX Background Player Active');
             
-            // Fake visibility state - YouTube can't know we're in background
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
             
-            // Block all visibility change events
             const blockEvent = (e) => {
                 e.stopImmediatePropagation();
                 e.preventDefault();
@@ -143,30 +132,19 @@ class MainActivity : AppCompatActivity() {
             window.addEventListener('pagehide', blockEvent, true);
             window.addEventListener('beforeunload', blockEvent, true);
             
-            // Force video to keep playing
             const keepPlaying = () => {
                 const video = document.querySelector('video');
-                if (video && !video.paused && !video.ended && !video.seeking) {
-                    // Video is playing - do nothing
-                    return;
-                }
-                
                 const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay');
                 if (video && !isAd && video.paused && !video.ended && video.currentTime > 0) {
                     video.play().catch(e => console.log('Play blocked:', e));
                 }
             };
             
-            // Override pause method
-            const video = document.querySelector('video');
-            if (video) {
+            if (document.querySelector('video')) {
                 const originalPause = video.pause;
                 video.pause = function() {
                     const isAd = document.querySelector('.ad-showing');
-                    if (!isAd) {
-                        console.log('Blocked pause attempt');
-                        return;
-                    }
+                    if (!isAd) return;
                     return originalPause.call(this);
                 };
             }
@@ -207,25 +185,31 @@ class MainActivity : AppCompatActivity() {
                 mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
-                setSupportZoom(false)
-                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                
+                // 🔥 MOBILE USER AGENT - Fix desktop site issue
+                userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
                 allowContentAccess = true
                 allowFileAccess = true
-                setRenderPriority(WebSettings.RenderPriority.HIGH)
             }
 
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // Inject both scripts
-                    view?.evaluateJavascript(superBackgroundJS, null)
-                    view?.evaluateJavascript(superAdBlockJS, null)
+                    // Inject all scripts in correct order
+                    view?.evaluateJavascript(fixNavigationJS, null)      // Fix popup first
+                    view?.evaluateJavascript(superBackgroundJS, null)    // Then background
+                    view?.evaluateJavascript(superAdBlockJS, null)       // Then ad blocker
                     
                     // Re-inject after 2 seconds for safety
                     view?.postDelayed({
-                        view.evaluateJavascript(superAdBlockJS, null)
+                        view?.evaluateJavascript(superAdBlockJS, null)
+                        view?.evaluateJavascript(superBackgroundJS, null)
                     }, 2000)
                 }
                 
@@ -243,6 +227,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            // Load mobile YouTube
             loadUrl("https://m.youtube.com")
         }
     }
@@ -261,9 +246,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // Keep WebView alive!
         binding.webView.onResume()
-        // Re-inject background script
         binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
 
@@ -276,7 +259,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        // CRITICAL: Don't pause WebView
         binding.webView.onResume()
         binding.webView.evaluateJavascript(superBackgroundJS, null)
     }
