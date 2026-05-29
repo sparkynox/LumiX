@@ -15,112 +15,71 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🔥 100% AD BLOCK + HIDE + MUTE (Video sound intact)
-    private val ultimateAdBlockJS = """
+    // 🔥 FAST AD BLOCKER + MOBILE MODE
+    private val fastAdBlockJS = """
         (function() {
-            console.log('🔥 100% Ad Blocker Active');
+            console.log('🔥 Fast Ad Blocker Active');
             
-            // ===== HIDE ALL ADS =====
-            const hideAllAds = () => {
-                const adSelectors = [
+            // Hide ads instantly
+            const hideAds = () => {
+                const selectors = [
                     '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
                     '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
                     '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
-                    '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
-                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer',
-                    '.ytp-ad-skip-button-container', '.ytd-banner-promo-renderer',
-                    '.ytp-ad-simple-ad-badge', '.ytp-ad-alert-message',
-                    'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
-                    '#masthead-ad', '.ad-container', '[class*="-ad-"]'
+                    '.ytp-ad-overlay-container', 'ytd-ad-slot-renderer'
                 ];
-                
-                adSelectors.forEach(sel => {
+                selectors.forEach(sel => {
                     document.querySelectorAll(sel).forEach(ad => {
-                        try {
-                            ad.remove();
-                            ad.style.display = 'none';
-                            ad.style.visibility = 'hidden';
-                            ad.style.height = '0px';
-                            ad.style.width = '0px';
-                            ad.style.opacity = '0';
-                        } catch(e) {}
+                        ad.remove();
+                        ad.style.display = 'none';
                     });
                 });
             };
             
-            // ===== SKIP ADS AUTOMATICALLY =====
-            const skipAdButtons = () => {
-                const skipSelectors = [
-                    '.ytp-ad-skip-button',
-                    '.ytp-skip-ad-button', 
-                    '.ytp-ad-skip-button-modern',
-                    '.ytp-skip-ad-button__text'
-                ];
-                
-                skipSelectors.forEach(sel => {
-                    document.querySelectorAll(sel).forEach(btn => {
-                        if (btn && btn.offsetParent !== null) {
-                            btn.click();
-                            console.log('Skipped ad');
-                        }
-                    });
+            // Skip ads
+            const skipAd = () => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
+                    if (btn.offsetParent !== null) btn.click();
                 });
             };
             
-            // ===== MUTE ONLY ADS, VIDEO SOUND INTACT =====
-            let adPlaying = false;
-            
-            const muteAdsOnly = () => {
+            // Mute only ads
+            let adActive = false;
+            const muteAds = () => {
                 const video = document.querySelector('video');
-                const isAdActive = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
-                
+                const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
                 if (video) {
-                    if (isAdActive && !adPlaying) {
-                        // Ad started - mute
+                    if (isAd && !adActive) {
                         video.muted = true;
-                        adPlaying = true;
-                        console.log('Ad playing - muted');
-                    } else if (!isAdActive && adPlaying) {
-                        // Ad ended - unmute
+                        adActive = true;
+                    } else if (!isAd && adActive) {
                         video.muted = false;
-                        adPlaying = false;
-                        console.log('Ad ended - sound restored');
+                        adActive = false;
                     }
                 }
             };
             
-            // ===== CSS INSTANT HIDE =====
+            // CSS
             const style = document.createElement('style');
             style.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
                 .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
-                .ytd-display-ad-renderer, .ytp-ad-overlay-container,
-                ytd-ad-slot-renderer, .ytd-banner-promo-renderer {
+                .ytd-display-ad-renderer, .ytp-ad-overlay-container {
                     display: none !important;
-                    visibility: hidden !important;
-                    height: 0px !important;
-                    width: 0px !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
                 }
             `;
             document.head.appendChild(style);
             
-            // ===== RUN EVERYTHING =====
             setInterval(() => {
-                hideAllAds();
-                skipAdButtons();
-                muteAdsOnly();
-            }, 150);
+                hideAds();
+                skipAd();
+                muteAds();
+            }, 200);
             
-            // Watch for new ads
             new MutationObserver(() => {
-                hideAllAds();
-                skipAdButtons();
-                muteAdsOnly();
-            }).observe(document.body, { childList: true, subtree: true, attributes: true });
-            
-            console.log('✅ 100% Ad Block - Hide + Mute, Video sound intact');
+                hideAds();
+                skipAd();
+            }).observe(document.body, { childList: true, subtree: true });
         })();
     """.trimIndent()
 
@@ -149,13 +108,13 @@ class MainActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 mediaPlaybackRequiresUserGesture = false
-                setMediaPlaybackRequiresUserGesture(false)
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
                 builtInZoomControls = true
                 displayZoomControls = false
-                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                // 🔥 FAST MOBILE USER AGENT
+                userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 cacheMode = WebSettings.LOAD_DEFAULT
             }
@@ -163,13 +122,7 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(ultimateAdBlockJS, null)
-                    view?.postDelayed({
-                        view?.evaluateJavascript(ultimateAdBlockJS, null)
-                    }, 1000)
-                    view?.postDelayed({
-                        view?.evaluateJavascript(ultimateAdBlockJS, null)
-                    }, 3000)
+                    view?.evaluateJavascript(fastAdBlockJS, null)
                 }
                 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -178,6 +131,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            // 🔥 MOBILE SITE - FAST LOAD
             loadUrl("https://m.youtube.com")
         }
     }
@@ -202,7 +156,6 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
-        binding.webView.evaluateJavascript(ultimateAdBlockJS, null)
     }
 
     override fun onStop() {
