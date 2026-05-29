@@ -53,13 +53,23 @@ class MainActivity : AppCompatActivity() {
                 .ytp-ad-action-interstitial, .ytp-ad-skip-button-container,
                 .ytp-ad-feedback-dialog-container, ytd-banner-promo-renderer,
                 ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer,
-                .ytd-promoted-sparkles-web-renderer {
+                .ytp-ad-visit-advertiser-button, .ytp-ad-button,
+                .ytp-ad-duration-remaining, .ytp-ad-simple-ad-badge {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
                     height: 0 !important;
                     width: 0 !important;
                     pointer-events: none !important;
+                }
+
+                .ad-showing video {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+
+                .ad-showing .html5-video-container {
+                    background: #000 !important;
                 }
             `;
             if (document.head) document.head.appendChild(style);
@@ -72,36 +82,30 @@ class MainActivity : AppCompatActivity() {
                 if (isAd) {
                     video.muted = true;
                     video.volume = 0;
-
-                    document.querySelectorAll(
-                        '.ytp-ad-player-overlay, .ytp-ad-module, .video-ads'
-                    ).forEach(el => {
-                        el.style.setProperty('display', 'none', 'important');
-                    });
+                    try { video.playbackRate = 16; } catch(e) {}
+                    video.style.setProperty('opacity', '0', 'important');
+                    video.style.setProperty('pointer-events', 'none', 'important');
 
                     document.querySelectorAll(
                         '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern, button[class*="skip"]'
-                    ).forEach(btn => {
-                        try { btn.click(); } catch(e) {}
-                    });
+                    ).forEach(btn => { try { btn.click(); } catch(e) {} });
 
-                    // 16x speed — ad instantly finishes
-                    try {
-                        if (video.playbackRate < 16) video.playbackRate = 16;
-                    } catch(e) {}
+                    document.querySelectorAll(
+                        '.ytp-ad-player-overlay, .ytp-ad-module, .video-ads, .ytp-ad-overlay-container'
+                    ).forEach(el => el.style.setProperty('display', 'none', 'important'));
 
                 } else {
-                    if (video.muted) video.muted = false;
-                    if (video.volume < 1) video.volume = 1;
-                    try {
-                        if (video.playbackRate !== 1) video.playbackRate = 1;
-                    } catch(e) {}
+                    video.muted = false;
+                    video.volume = 1;
+                    video.style.removeProperty('opacity');
+                    video.style.removeProperty('pointer-events');
+                    try { video.playbackRate = 1; } catch(e) {}
                 }
             }
 
             let last = 0;
             function loop(t) {
-                if (t - last > 150) {
+                if (t - last > 100) {
                     handleAd();
                     last = t;
                 }
@@ -111,6 +115,9 @@ class MainActivity : AppCompatActivity() {
 
             new MutationObserver(() => handleAd())
                 .observe(document.body, { childList: true, subtree: true });
+
+            document.addEventListener('play', handleAd, true);
+            document.addEventListener('playing', handleAd, true);
         })();
     """.trimIndent()
 
