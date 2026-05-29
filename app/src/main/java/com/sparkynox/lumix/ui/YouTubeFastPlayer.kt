@@ -3,7 +3,6 @@ package com.sparkynox.lumix.ui
 import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -33,94 +32,101 @@ class YouTubeFastPlayer : AppCompatActivity() {
             (function() {
                 console.log('🔥 LumiX Ultimate Ad Blocker Active');
                 
-                // Remove ALL ads instantly
-                const removeAds = () => {
-                    const adSelectors = [
+                const killAllAds = () => {
+                    const selectors = [
                         '.video-ads', '.ytp-ad-module', '.ytp-ad-player-overlay',
                         '.ytp-ad-image-overlay', '.ytp-ad-text-overlay', '#player-ads',
                         '.ytd-display-ad-renderer', '.ytd-promoted-video-renderer',
                         '.ytp-ad-progress-list', '.ytp-ad-action-interstitial',
                         '.ytp-ad-overlay-container', '.ytp-ad-skip-button-container',
-                        'ytd-ad-slot-renderer', 'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]',
-                        '.ytp-ad-simple-ad-badge', '.ytp-ad-advertiser-info', '.ytp-ad-player-overlay-internal'
+                        'ytd-ad-slot-renderer', '#masthead-ad', '.ad-container'
                     ];
                     
-                    adSelectors.forEach(selector => {
-                        document.querySelectorAll(selector).forEach(ad => {
+                    selectors.forEach(sel => {
+                        document.querySelectorAll(sel).forEach(ad => {
                             try {
                                 ad.remove();
                                 ad.style.display = 'none';
-                                ad.style.visibility = 'hidden';
                             } catch(e) {}
                         });
                     });
                 };
                 
-                // Mute ads, unmute real videos
-                const handleAudio = () => {
+                const controlAudio = () => {
                     const video = document.querySelector('video');
-                    const isAdShowing = document.querySelector('.ad-showing, .ytp-ad-player-overlay, .video-ads') !== null;
+                    const isAd = document.querySelector('.ad-showing, .ytp-ad-player-overlay') !== null;
                     
                     if (video) {
-                        if (isAdShowing) {
+                        if (isAd) {
                             video.muted = true;
                             video.volume = 0;
-                        } else if (!video.muted && !isAdShowing && !video.paused) {
+                        } else if (!video.muted && !video.paused) {
                             video.muted = false;
                             video.volume = 1;
                         }
                     }
                 };
                 
-                // Auto skip ads
-                const skipAd = () => {
-                    const skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern');
-                    if (skipBtn && skipBtn.offsetParent !== null) {
-                        skipBtn.click();
-                    }
-                    
-                    // Try to seek to end of unskippable ads
-                    const video = document.querySelector('video');
-                    if (video && document.querySelector('.ad-showing') && video.duration - video.currentTime < 5) {
-                        video.currentTime = video.duration;
-                    }
+                const clickSkip = () => {
+                    document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button').forEach(btn => {
+                        if (btn.offsetParent !== null) btn.click();
+                    });
                 };
                 
-                // CSS injection for instant hiding
                 const style = document.createElement('style');
                 style.textContent = `
                     .video-ads, .ytp-ad-module, .ytp-ad-player-overlay,
                     .ytp-ad-image-overlay, .ytp-ad-text-overlay, #player-ads,
-                    .ytd-display-ad-renderer, [class*="-ad-"], [class*="ad-"] {
+                    .ytd-display-ad-renderer, .ytp-ad-overlay-container {
                         display: none !important;
                         visibility: hidden !important;
                         height: 0px !important;
-                        opacity: 0 !important;
                     }
                 `;
                 document.head.appendChild(style);
                 
-                // Run continuously but efficiently
-                let lastRun = 0;
+                let last = 0;
                 function loop(time) {
-                    if (time - lastRun > 200) {
-                        removeAds();
-                        handleAudio();
-                        skipAd();
-                        lastRun = time;
+                    if (time - last > 200) {
+                        killAllAds();
+                        controlAudio();
+                        clickSkip();
+                        last = time;
                     }
                     requestAnimationFrame(loop);
                 }
                 requestAnimationFrame(loop);
                 
-                // Mutation observer for dynamically loaded ads
-                const observer = new MutationObserver(() => {
-                    removeAds();
-                    skipAd();
-                });
-                observer.observe(document.body, { childList: true, subtree: true });
+                new MutationObserver(() => { killAllAds(); clickSkip(); })
+                    .observe(document.body, { childList: true, subtree: true });
+                    
+                console.log('✅ LumiX Ad Blocker Ready');
+            })();
+        """
+        
+        private const val BACKGROUND_JS = """
+            (function() {
+                Object.defineProperty(document, 'hidden', { get: () => false });
+                Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
                 
-                console.log('✅ LumiX Ad Blocker Ready - Background Play Enabled');
+                const blockEvent = (e) => {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                };
+                
+                document.addEventListener('visibilitychange', blockEvent, true);
+                window.addEventListener('blur', blockEvent, true);
+                window.addEventListener('pagehide', blockEvent, true);
+                
+                setInterval(() => {
+                    const video = document.querySelector('video');
+                    const isAd = document.querySelector('.ad-showing');
+                    if (video && !isAd && video.paused && video.currentTime > 0) {
+                        video.play().catch(() => {});
+                    }
+                }, 500);
+                
+                console.log('✅ LumiX Background Player Ready');
             })();
         """
     }
@@ -130,13 +136,11 @@ class YouTubeFastPlayer : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_youtube_player)
 
-        // Keep screen on and CPU awake for background play
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
-        // Wake lock for background playback
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LumiX:BackgroundPlay")
-        wakeLock?.acquire(10*60*1000L) // 10 minutes
+        wakeLock?.acquire(10*60*1000L)
 
         setupWebView()
         
@@ -160,28 +164,26 @@ class YouTubeFastPlayer : AppCompatActivity() {
             allowContentAccess = true
             loadsImagesAutomatically = true
             cacheMode = WebSettings.LOAD_DEFAULT
-            setAppCacheEnabled(true)
             
-            // CRITICAL for background playback
+            // Critical for background playback
             mediaPlaybackRequiresUserGesture = false
-            setMediaPlaybackRequiresUserGesture(false)
             
-            // Desktop mode for better experience
+            // Desktop mode
             userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             
-            // Performance settings
-            layoutAlgorithm = WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
-            setRenderPriority(WebSettings.RenderPriority.HIGH)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            }
         }
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                view?.evaluateJavascript(BACKGROUND_JS, null)
                 view?.evaluateJavascript(AD_BLOCKER_JS, null)
-                // Re-inject after 1 second for safety
                 view?.postDelayed({
-                    view.evaluateJavascript(AD_BLOCKER_JS, null)
-                }, 1000)
+                    view?.evaluateJavascript(AD_BLOCKER_JS, null)
+                }, 2000)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -232,7 +234,7 @@ class YouTubeFastPlayer : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (customView != null) {
-                webView.webChromeClient.onHideCustomView()
+                webView.webChromeClient?.onHideCustomView()
                 return true
             } else if (webView.canGoBack()) {
                 webView.goBack()
@@ -251,7 +253,6 @@ class YouTubeFastPlayer : AppCompatActivity() {
 
     override fun onDestroy() {
         if (!isFinishing) {
-            // Keep playing in background
             webView.loadUrl("about:blank")
         }
         wakeLock?.release()
