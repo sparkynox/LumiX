@@ -4,17 +4,11 @@ import android.content.Context
 import android.os.Build
 import java.io.File
 
-object YtDlpInstaller {
+object YtDlpHelper {
 
     fun install(context: Context) {
         val binary = getBinaryFile(context)
-        // Agar exists hai but size 0 hai — delete karke dobara copy karo
-        if (binary.exists() && binary.length() < 1000) {
-            binary.delete()
-        }
-        if (!binary.exists()) {
-            copyFromAssets(context, binary)
-        }
+        if (!binary.exists()) copyFromAssets(context, binary)
         binary.setExecutable(true, false)
     }
 
@@ -25,28 +19,16 @@ object YtDlpInstaller {
     private fun copyFromAssets(context: Context, dest: File) {
         val assetName = when {
             Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "yt-dlp_arm64"
+            Build.SUPPORTED_ABIS.contains("armeabi-v7a") -> "yt-dlp_armv7"
             else -> "yt-dlp_armv7"
         }
         try {
-            val assetList = context.assets.list("") ?: emptyArray()
-            if (!assetList.contains(assetName)) {
-                // Try other binary name
-                val fallback = if (assetName == "yt-dlp_arm64") "yt-dlp_armv7" else "yt-dlp_arm64"
-                if (assetList.contains(fallback)) {
-                    copyAsset(context, fallback, dest)
-                }
-                return
+            context.assets.open(assetName).use { input ->
+                dest.outputStream().use { input.copyTo(it) }
             }
-            copyAsset(context, assetName, dest)
+            dest.setExecutable(true, false)
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }
-
-    private fun copyAsset(context: Context, assetName: String, dest: File) {
-        context.assets.open(assetName).use { input ->
-            dest.outputStream().use { input.copyTo(it) }
-        }
-        dest.setExecutable(true, false)
     }
 }
