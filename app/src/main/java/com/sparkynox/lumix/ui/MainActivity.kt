@@ -14,7 +14,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.sparkynox.lumix.databinding.ActivityMainBinding
 import com.sparkynox.lumix.helper.YtDlpHelper
-import com.sparkynox.lumix.helper.YtDlpInstaller
 import com.sparkynox.lumix.model.StreamInfo
 import com.sparkynox.lumix.service.PlayerService
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +67,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // SPA URL change detection
             let lastUrl = '';
             setInterval(() => {
                 const current = window.location.href;
@@ -78,17 +76,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }, 500);
 
-            // Video element observer — catch autoplay next video
             const observer = new MutationObserver(() => {
                 document.querySelectorAll('video').forEach(v => {
                     if (!v._lumiBlocked) {
                         v._lumiBlocked = true;
                         v.addEventListener('play', () => {
-                            // Mute WebView video — ExoPlayer handles audio
                             v.muted = true;
                             v.volume = 0;
-                            const url = window.location.href;
-                            notifyVideo(url);
+                            notifyVideo(window.location.href);
                         });
                         v.addEventListener('loadstart', () => {
                             v.muted = true;
@@ -99,13 +94,11 @@ class MainActivity : AppCompatActivity() {
             });
             observer.observe(document.body, { childList: true, subtree: true });
 
-            // Check existing videos too
             document.querySelectorAll('video').forEach(v => {
                 v.muted = true;
                 v.volume = 0;
             });
 
-            // Check immediately
             notifyVideo(window.location.href);
         })();
     """.trimIndent()
@@ -117,10 +110,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            YtDlpInstaller.install(applicationContext)
-        }
 
         val serviceIntent = Intent(this, PlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -140,7 +129,7 @@ class MainActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
-                mediaPlaybackRequiresUserGesture = false // autoplay allow
+                mediaPlaybackRequiresUserGesture = false
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
@@ -214,7 +203,6 @@ class MainActivity : AppCompatActivity() {
                     request: WebResourceRequest?
                 ): WebResourceResponse? {
                     val url = request?.url?.toString() ?: return null
-                    // Block ad networks
                     if (url.contains("doubleclick.net") ||
                         url.contains("googleadservices.com") ||
                         url.contains("googlesyndication.com") ||
