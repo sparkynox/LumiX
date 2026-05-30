@@ -1,99 +1,65 @@
 package com.sparkynox.lumix.helper
 
 import android.content.Context
-import com.sparkynox.lumix.YtDlpInstaller
-import com.sparkynox.lumix.model.VideoInfo
+import com.sparkynox.lumix.model.StreamInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 object YtDlpHelper {
 
-    // Returns VideoInfo or throws an exception with a user-readable message
-    suspend fun extract(context: Context, url: String): VideoInfo = withContext(Dispatchers.IO) {
+    suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
         val binary = YtDlpInstaller.getBinaryFile(context)
+        if (!binary.exists()) throw Exception("yt-dlp not found")
 
-        if (!binary.exists()) {
-            throw Exception("yt-dlp binary not found. Please reinstall the app.")
-        }
-
-        // Run yt-dlp with JSON output, no actual download
         val process = ProcessBuilder(
             binary.absolutePath,
             "--dump-single-json",
             "--no-playlist",
-            "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "--format", "bestaudio[ext=m4a]/bestaudio/best",
             "--no-warnings",
+            "--no-check-certificates",
             url
-        )
-            .redirectErrorStream(true)
-            .start()
+        ).redirectErrorStream(true).start()
 
         val output = process.inputStream.bufferedReader().readText()
-        val exitCode = process.waitFor()
+        process.waitFor()
 
-        if (exitCode != 0) {
-            // Try to pull a readable error from output
-            val errorMsg = output.lines().firstOrNull { it.contains("ERROR") }
-                ?: "Failed to extract video info"
-            throw Exception(errorMsg)
-        }
-
-        parseJson(output)
-    }
-
-    private fun parseJson(raw: String): VideoInfo {
-        val json = JSONObject(raw)
-
+        val json = JSONObject(output)
         val videoId = json.optString("id", "")
-        val title = json.optString("title", "Unknown Title")
-        val uploader = json.optString("uploader", "Unknown")
+        val title = json.optString("title", "Unknown")
+        val uploader = json.optString("uploader", "")
+        val thumbnail = json.optString("thumbnail", "https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
         val duration = json.optLong("duration", 0L)
-        val thumbnail = json.optString("thumbnail", "")
-        val isLive = json.optBoolean("is_live", false)
-
-        // Get best stream URL
         val streamUrl = json.optString("url", "")
 
-        // Try to find an audio-only format for background mode
-        var audioUrl: String? = null
-        val formats = json.optJSONArray("formats")
-        if (formats != null) {
-            for (i in 0 until formats.length()) {
-                val fmt = formats.getJSONObject(i)
-                val vcodec = fmt.optString("vcodec", "")
-                val acodec = fmt.optString("acodec", "")
-                val ext = fmt.optString("ext", "")
-                // Audio-only format (no video codec, has audio)
-                if ((vcodec == "none" || vcodec.isEmpty()) && acodec != "none" && ext == "m4a") {
-                    audioUrl = fmt.optString("url")
-                    break
-                }
-            }
-        }
+        if (streamUrl.isEmpty()) throw Exception("No stream URL found")
 
-        return VideoInfo(
-            id = videoId,
+        StreamInfo(
+            videoId = videoId,
             title = title,
             uploader = uploader,
-            duration = duration,
             thumbnailUrl = thumbnail,
-            streamUrl = streamUrl,
-            audioOnlyUrl = audioUrl,
-            isLive = isLive
+            duration = duration,
+            streamUrl = streamUrl
         )
     }
 
-    // Extract just the video ID from various YouTube URL formats
     fun extractVideoId(url: String): String? {
         val patterns = listOf(
             Regex("(?:v=|youtu\\.be/)([A-Za-z0-9_-]{11})"),
             Regex("(?:embed/)([A-Za-z0-9_-]{11})")
         )
-        for (pattern in patterns) {
-            val match = pattern.find(url)
+        for (p in patterns) {
+            val match = p.find(url)
             if (match != null) return match.groupValues[1]
         }
         return null
+    }
+
+    fun isYouTubeUrl(url: String): Boolean {
+        return url.contains("youtube.com/watch") ||
+               url.contains("youtu.be/") ||
+               url.contains("youtube.com/shorts/")
     }
 }
