@@ -71,16 +71,12 @@ jobs:
   ]
 }
 EOF
-          echo "✅ google-services.json created"
-          cat app/google-services.json
 
       - name: Download yt-dlp binaries
         run: |
           mkdir -p app/src/main/assets
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" \
-            -o app/src/main/assets/yt-dlp_arm64
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" \
-            -o app/src/main/assets/yt-dlp_armv7
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" -o app/src/main/assets/yt-dlp_arm64
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" -o app/src/main/assets/yt-dlp_armv7
           chmod +x app/src/main/assets/yt-dlp_arm64
           chmod +x app/src/main/assets/yt-dlp_armv7
           ls -lh app/src/main/assets/
