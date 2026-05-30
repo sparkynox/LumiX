@@ -34,62 +34,17 @@ jobs:
           chmod +x gradlew
 
       - name: Download yt-dlp binaries
-        run: |
-          mkdir -p app/src/main/assets
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" -o app/src/main/assets/yt-dlp_arm64
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" -o app/src/main/assets/yt-dlp_armv7
-          chmod +x app/src/main/assets/yt-dlp_*
-
-      - name: Create google-services.json
-        run: |
-          echo '{
-            "project_info": {
-              "project_number": "464309606770",
-              "project_id": "lumix-c55a9"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
-                  "android_client_info": {
-                    "package_name": "com.sparkynox.lumix"
-                  }
-                },
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
-                  }
-                ]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
-                  "android_client_info": {
-                    "package_name": "com.sparkynox.lumix.debug"
-                  }
-                },
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
-                  }
-                ]
-              }
-            ]
-          }' > app/google-services.json
-
-      - name: Add string resources
-        run: |
-          mkdir -p app/src/main/res/values
-          echo '<resources>
-            <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
-          </resources>' > app/src/main/res/values/ids.xml
-
-      - name: Build Release APKs
-        id: buildRelease
-        env:
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: |
-          ./gradlew assembleRelease --stacktrace || echo "status=failed" >> $GITHUB_OUTPUT
+  run: |
+    mkdir -p app/src/main/assets
+    curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" \
+      -o app/src/main/assets/yt-dlp_arm64
+    curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" \
+      -o app/src/main/assets/yt-dlp_armv7
+    chmod +x app/src/main/assets/yt-dlp_arm64
+    chmod +x app/src/main/assets/yt-dlp_armv7
+    # Verify size
+    ls -lh app/src/main/assets/
+    du -sh app/src/main/assets/*
 
       - name: Build Debug APKs (Fallback)
         env:
