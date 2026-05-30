@@ -60,6 +60,8 @@ object YtDlpHelper {
     fun isYouTubeUrl(url: String): Boolean {
         return url.contains("youtube.com/watch") ||
                url.contains("youtu.be/") ||
-               url.contains("youtube.com/shorts/")
+               url.contains("youtube.com/shorts/") ||
+               url.contains("youtube.com/v/") ||
+               (url.contains("youtube.com") && url.contains("v="))
     }
 }
