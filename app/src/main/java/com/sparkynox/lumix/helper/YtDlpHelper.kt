@@ -19,13 +19,30 @@ object YtDlpHelper {
             "--format", "bestaudio[ext=m4a]/bestaudio/best",
             "--no-warnings",
             "--no-check-certificates",
+            "--extractor-retries", "3",
             url
         ).redirectErrorStream(true).start()
 
         val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
+        val exitCode = process.waitFor()
 
-        val json = JSONObject(output)
+        // Show actual yt-dlp output in error so we can debug
+        if (exitCode != 0) {
+            val shortError = output.take(200)
+            throw Exception("yt-dlp error: $shortError")
+        }
+
+        if (output.isEmpty() || !output.trimStart().startsWith("{")) {
+            val shortOutput = output.take(200)
+            throw Exception("Bad output: $shortOutput")
+        }
+
+        val json = try {
+            JSONObject(output)
+        } catch (e: Exception) {
+            throw Exception("JSON parse failed: ${output.take(100)}")
+        }
+
         val videoId = json.optString("id", "")
         val title = json.optString("title", "Unknown")
         val uploader = json.optString("uploader", "")
