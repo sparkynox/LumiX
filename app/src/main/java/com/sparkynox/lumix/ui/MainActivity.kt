@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
@@ -29,10 +30,10 @@ class MainActivity : AppCompatActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var originalOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
-    // Inject this to hide YouTube's own player UI when we intercept
-    private val hidePlayerJS = """
+    private val hideAdsJS = """
         (function() {
-            // Hide feed ads
+            if (window._lumiAds) return;
+            window._lumiAds = true;
             const style = document.createElement('style');
             style.textContent = `
                 ytd-ad-slot-renderer, ytd-banner-promo-renderer,
@@ -54,16 +55,23 @@ class MainActivity : AppCompatActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Install yt-dlp binary
+        // Install yt-dlp binary async
         lifecycleScope.launch(Dispatchers.IO) {
             YtDlpInstaller.install(applicationContext)
         }
 
+        // Start PlayerService immediately — Android 8+ needs startForegroundService
+        // Android 9, 10, 11, 12, 13, 14 all covered
+        val serviceIntent = Intent(this, PlayerService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            // Android 5, 6, 7 (API 21-25)
+            startService(serviceIntent)
+        }
+
         setupWebView()
         setupButtons()
-
-        // Start service so it's ready
-        startService(Intent(this, PlayerService::class.java))
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -83,7 +91,6 @@ class MainActivity : AppCompatActivity() {
                 loadsImagesAutomatically = true
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                // Desktop UA — gets better YouTube experience
                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
             }
 
@@ -93,9 +100,8 @@ class MainActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    // Hide feed ads only — not video ads (we intercept before they load)
-                    view?.evaluateJavascript(hidePlayerJS, null)
-                    view?.postDelayed({ view.evaluateJavascript(hidePlayerJS, null) }, 2000)
+                    view?.evaluateJavascript(hideAdsJS, null)
+                    view?.postDelayed({ view.evaluateJavascript(hideAdsJS, null) }, 2000)
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -104,19 +110,19 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
 
-                    // Intercept YouTube video URLs
+                    // Intercept YouTube video URLs — play via ExoPlayer
                     if (YtDlpHelper.isYouTubeUrl(url)) {
                         extractAndPlay(url)
-                        return true // don't load in WebView
+                        return true
                     }
 
-                    // Allow YouTube browsing URLs
+                    // Allow YouTube browsing + Google login
                     if (url.contains("youtube.com") || url.contains("youtu.be") ||
                         url.contains("google.com") || url.contains("accounts.google")) {
                         return false
                     }
 
-                    // Open external links in browser
+                    // Open other links in browser
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                     } catch (e: Exception) { }
@@ -125,9 +131,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             webChromeClient = object : WebChromeClient() {
+                // Block YouTube's own player — we use ExoPlayer
                 override fun onShowCustomView(view: View, callback: CustomViewCallback) {
-                    // Block YouTube's own video player from showing
-                    // (we handle playback via ExoPlayer)
                     callback.onCustomViewHidden()
                 }
 
@@ -144,7 +149,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun extractAndPlay(url: String) {
-        // Show loading state
         binding.layoutLoading.visibility = View.VISIBLE
         binding.tvLoadingTitle.text = "Loading..."
 
@@ -157,14 +161,17 @@ class MainActivity : AppCompatActivity() {
                 binding.tvLoadingTitle.text = info.title
                 playInService(info)
 
-                // After short delay hide loader — service is playing
                 binding.webView.postDelayed({
                     binding.layoutLoading.visibility = View.GONE
                 }, 1500)
 
             } catch (e: Exception) {
                 binding.layoutLoading.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Error: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -176,7 +183,12 @@ class MainActivity : AppCompatActivity() {
             putExtra(PlayerService.EXTRA_TITLE, info.title)
             putExtra(PlayerService.EXTRA_UPLOADER, info.uploader)
         }
-        startService(intent)
+        // Works on all Android versions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
 
     private fun setupButtons() {
