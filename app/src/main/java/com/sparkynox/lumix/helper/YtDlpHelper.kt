@@ -1,87 +1,119 @@
 package com.sparkynox.lumix.helper
 
 import android.content.Context
+import com.sparkynox.lumix.model.StreamInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.sparkynox.lumix.model.StreamInfo
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 object YtDlpHelper {
 
-    // Invidious instances — fallback agar ek kaam na kare
-    private val instances = listOf(
-        "https://inv.nadeko.net",
-        "https://invidious.io.lol",
-        "https://yt.drgnz.club",
-        "https://iv.datura.network"
-    )
+    // InnerTube API — YouTube ka internal API, koi key nahi
+    private const val INNERTUBE_URL = "https://www.youtube.com/youtubei/v1"
+    private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8" // YouTube's own public key
+    private const val CLIENT_VERSION = "17.31.35"
+    private const val CLIENT_NAME = "ANDROID"
+
+    private fun innerTubeBody(extra: String = ""): String {
+        return """
+        {
+            "context": {
+                "client": {
+                    "clientName": "$CLIENT_NAME",
+                    "clientVersion": "$CLIENT_VERSION",
+                    "androidSdkVersion": 30,
+                    "hl": "en",
+                    "gl": "US"
+                }
+            }
+            $extra
+        }
+        """.trimIndent()
+    }
 
     suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
         val videoId = extractVideoId(url)
             ?: throw Exception("Invalid YouTube URL")
 
-        var lastError = ""
-        for (instance in instances) {
-            try {
-                return@withContext fetchFromInvidious(instance, videoId)
-            } catch (e: Exception) {
-                lastError = e.message ?: "Unknown error"
-                continue // try next instance
-            }
-        }
-        throw Exception("All instances failed: $lastError")
-    }
+        val requestBody = innerTubeBody(""", "videoId": "$videoId" """)
 
-    private fun fetchFromInvidious(instance: String, videoId: String): StreamInfo {
-        val apiUrl = "$instance/api/v1/videos/$videoId?fields=title,author,lengthSeconds,adaptiveFormats,formatStreams"
-
-        val conn = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
+        val conn = (URL("$INNERTUBE_URL/player?key=$API_KEY").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("User-Agent", "com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip")
+            setRequestProperty("X-YouTube-Client-Name", "3")
+            setRequestProperty("X-YouTube-Client-Version", CLIENT_VERSION)
+            doOutput = true
             connectTimeout = 10000
             readTimeout = 15000
-            setRequestProperty("User-Agent", "Mozilla/5.0")
         }
 
+        conn.outputStream.use { it.write(requestBody.toByteArray()) }
+
         val responseCode = conn.responseCode
-        if (responseCode != 200) throw Exception("HTTP $responseCode from $instance")
+        if (responseCode != 200) throw Exception("InnerTube error: HTTP $responseCode")
 
         val response = conn.inputStream.bufferedReader().readText()
         conn.disconnect()
 
         val json = JSONObject(response)
 
-        val title = json.optString("title", "Unknown")
-        val uploader = json.optString("author", "")
-        val duration = json.optLong("lengthSeconds", 0L)
+        // Check playability
+        val playability = json.optJSONObject("playabilityStatus")
+        val status = playability?.optString("status", "") ?: ""
+        if (status == "ERROR" || status == "UNPLAYABLE") {
+            val reason = playability?.optString("reason", "Video unavailable") ?: "Video unavailable"
+            throw Exception(reason)
+        }
+
+        val videoDetails = json.optJSONObject("videoDetails")
+            ?: throw Exception("No video details")
+
+        val title = videoDetails.optString("title", "Unknown")
+        val uploader = videoDetails.optString("author", "")
+        val duration = videoDetails.optString("lengthSeconds", "0").toLongOrNull() ?: 0L
         val thumbnail = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-        // Try adaptive formats first (audio only — smaller, faster)
+        // Get stream URLs from streamingData
+        val streamingData = json.optJSONObject("streamingData")
+            ?: throw Exception("No streaming data — video may be restricted")
+
         var streamUrl = ""
-        val adaptiveFormats = json.optJSONArray("adaptiveFormats")
+
+        // Try adaptive formats first (audio only — no ads, smaller)
+        val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats")
         if (adaptiveFormats != null) {
             for (i in 0 until adaptiveFormats.length()) {
                 val fmt = adaptiveFormats.getJSONObject(i)
-                val type = fmt.optString("type", "")
-                val url = fmt.optString("url", "")
-                if (url.isNotEmpty() && (type.contains("audio/mp4") || type.contains("audio/webm"))) {
-                    streamUrl = url
+                val mimeType = fmt.optString("mimeType", "")
+                val url2 = fmt.optString("url", "")
+                if (url2.isNotEmpty() && mimeType.contains("audio/mp4")) {
+                    streamUrl = url2
                     break
                 }
             }
         }
 
-        // Fallback to formatStreams (video+audio)
+        // Fallback to formats (video+audio)
         if (streamUrl.isEmpty()) {
-            val formatStreams = json.optJSONArray("formatStreams")
-            if (formatStreams != null && formatStreams.length() > 0) {
-                streamUrl = formatStreams.getJSONObject(0).optString("url", "")
+            val formats = streamingData.optJSONArray("formats")
+            if (formats != null && formats.length() > 0) {
+                for (i in 0 until formats.length()) {
+                    val fmt = formats.getJSONObject(i)
+                    val url2 = fmt.optString("url", "")
+                    if (url2.isNotEmpty()) {
+                        streamUrl = url2
+                        break
+                    }
+                }
             }
         }
 
-        if (streamUrl.isEmpty()) throw Exception("No stream URL from $instance")
+        if (streamUrl.isEmpty()) throw Exception("No stream URL found")
 
-        return StreamInfo(
+        StreamInfo(
             videoId = videoId,
             title = title,
             uploader = uploader,
