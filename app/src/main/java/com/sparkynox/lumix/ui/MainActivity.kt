@@ -10,7 +10,6 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.*
-import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -26,9 +25,6 @@ import kotlinx.coroutines.withContext
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var customView: View? = null
-    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-    private var originalOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
     private val hideAdsJS = """
         (function() {
@@ -39,11 +35,22 @@ class MainActivity : AppCompatActivity() {
                 ytd-ad-slot-renderer, ytd-banner-promo-renderer,
                 ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer,
                 ytd-display-ad-renderer, #masthead-ad,
-                ytd-promoted-video-renderer, ytd-promoted-sparkles-web-renderer {
+                ytd-promoted-video-renderer, ytd-promoted-sparkles-web-renderer,
+                .video-ads, .ytp-ad-module, #player-ads,
+                .ytp-ad-overlay-container, .ytp-ad-player-overlay,
+                .ytp-ad-progress-list, .ytp-ad-skip-button-container {
                     display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
                 }
             `;
             document.head && document.head.appendChild(style);
+
+            // Also skip any ad skip buttons instantly
+            setInterval(() => {
+                document.querySelectorAll('.ytp-ad-skip-button, .ytp-skip-ad-button')
+                    .forEach(btn => { try { btn.click(); } catch(e) {} });
+            }, 300);
         })();
     """.trimIndent()
 
@@ -55,18 +62,15 @@ class MainActivity : AppCompatActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Install yt-dlp binary async
         lifecycleScope.launch(Dispatchers.IO) {
             YtDlpInstaller.install(applicationContext)
         }
 
-        // Start PlayerService immediately — Android 8+ needs startForegroundService
-        // Android 9, 10, 11, 12, 13, 14 all covered
+        // Start service immediately — all Android versions
         val serviceIntent = Intent(this, PlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {
-            // Android 5, 6, 7 (API 21-25)
             startService(serviceIntent)
         }
 
@@ -110,19 +114,19 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
 
-                    // Intercept YouTube video URLs — play via ExoPlayer
+                    // Intercept YouTube video — play via ExoPlayer, no WebView load
                     if (YtDlpHelper.isYouTubeUrl(url)) {
                         extractAndPlay(url)
-                        return true
+                        return true // block WebView from loading — no ads!
                     }
 
-                    // Allow YouTube browsing + Google login
+                    // Allow YouTube browse + Google login
                     if (url.contains("youtube.com") || url.contains("youtu.be") ||
                         url.contains("google.com") || url.contains("accounts.google")) {
                         return false
                     }
 
-                    // Open other links in browser
+                    // External links — open in browser
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                     } catch (e: Exception) { }
@@ -131,16 +135,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             webChromeClient = object : WebChromeClient() {
-                // Block YouTube's own player — we use ExoPlayer
+                // Block YouTube's own video player completely
                 override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                     callback.onCustomViewHidden()
-                }
-
-                override fun onHideCustomView() {
-                    customViewCallback?.onCustomViewHidden()
-                    requestedOrientation = originalOrientation
-                    setContentView(binding.root)
-                    customView = null
                 }
             }
 
@@ -183,7 +180,6 @@ class MainActivity : AppCompatActivity() {
             putExtra(PlayerService.EXTRA_TITLE, info.title)
             putExtra(PlayerService.EXTRA_UPLOADER, info.uploader)
         }
-        // Works on all Android versions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
