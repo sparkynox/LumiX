@@ -1,34 +1,55 @@
 package com.sparkynox.lumix.helper
 
 import android.content.Context
-import android.os.Build
-import java.io.File
+import com.sparkynox.lumix.model.StreamInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 object YtDlpHelper {
 
-    fun install(context: Context) {
-        val binary = getBinaryFile(context)
-        if (!binary.exists()) copyFromAssets(context, binary)
-        binary.setExecutable(true, false)
+    suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
+        val binary = YtDlpInstaller.getBinaryFile(context)
+        if (!binary.exists()) throw Exception("yt-dlp not found — reinstall app")
+
+        val process = ProcessBuilder(
+            binary.absolutePath,
+            "--dump-single-json",
+            "--no-playlist",
+            "--format", "bestaudio[ext=m4a]/bestaudio/best",
+            "--no-warnings",
+            "--no-check-certificates",
+            url
+        ).redirectErrorStream(true).start()
+
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+
+        val json = JSONObject(output)
+        val videoId = json.optString("id", "")
+        val title = json.optString("title", "Unknown")
+        val uploader = json.optString("uploader", "")
+        val thumbnail = json.optString("thumbnail", "https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
+        val duration = json.optLong("duration", 0L)
+        val streamUrl = json.optString("url", "")
+
+        if (streamUrl.isEmpty()) throw Exception("No stream URL found")
+
+        StreamInfo(
+            videoId = videoId,
+            title = title,
+            uploader = uploader,
+            thumbnailUrl = thumbnail,
+            duration = duration,
+            streamUrl = streamUrl
+        )
     }
 
-    fun getBinaryFile(context: Context): File {
-        return File(context.filesDir, "yt-dlp")
-    }
-
-    private fun copyFromAssets(context: Context, dest: File) {
-        val assetName = when {
-            Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "yt-dlp_arm64"
-            Build.SUPPORTED_ABIS.contains("armeabi-v7a") -> "yt-dlp_armv7"
-            else -> "yt-dlp_armv7"
-        }
-        try {
-            context.assets.open(assetName).use { input ->
-                dest.outputStream().use { input.copyTo(it) }
-            }
-            dest.setExecutable(true, false)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun isYouTubeUrl(url: String): Boolean {
+        return url.contains("youtube.com/watch") ||
+               url.contains("youtu.be/") ||
+               url.contains("youtube.com/shorts/") ||
+               url.contains("youtube.com/v/") ||
+               (url.contains("youtube.com") && url.contains("v="))
     }
 }
