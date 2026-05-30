@@ -25,12 +25,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var isExtracting = false
+    private var lastExtractedUrl = ""
 
     private val hideAdsJS = """
         (function() {
             if (window._lumiAds) return;
             window._lumiAds = true;
-
             const style = document.createElement('style');
             style.textContent = `
                 ytd-ad-slot-renderer, ytd-banner-promo-renderer,
@@ -49,25 +49,64 @@ class MainActivity : AppCompatActivity() {
             `;
             document.head && document.head.appendChild(style);
 
-            // Skip button instant click
             setInterval(() => {
                 document.querySelectorAll(
                     '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern'
                 ).forEach(btn => { try { btn.click(); } catch(e) {} });
             }, 200);
+        })();
+    """.trimIndent()
 
-            // Block video from playing in WebView — we use ExoPlayer
+    private val interceptVideoJS = """
+        (function() {
+            if (window._lumiIntercept) return;
+            window._lumiIntercept = true;
+
+            function notifyVideo(url) {
+                if (url.includes('watch?v=') || url.includes('/shorts/')) {
+                    try { window.LumiX.onVideoDetected(url); } catch(e) {}
+                }
+            }
+
+            // SPA URL change detection
+            let lastUrl = '';
+            setInterval(() => {
+                const current = window.location.href;
+                if (current !== lastUrl) {
+                    lastUrl = current;
+                    notifyVideo(current);
+                }
+            }, 500);
+
+            // Video element observer — catch autoplay next video
             const observer = new MutationObserver(() => {
                 document.querySelectorAll('video').forEach(v => {
                     if (!v._lumiBlocked) {
                         v._lumiBlocked = true;
-                        v.pause();
-                        v.src = '';
-                        v.load();
+                        v.addEventListener('play', () => {
+                            // Mute WebView video — ExoPlayer handles audio
+                            v.muted = true;
+                            v.volume = 0;
+                            const url = window.location.href;
+                            notifyVideo(url);
+                        });
+                        v.addEventListener('loadstart', () => {
+                            v.muted = true;
+                            v.volume = 0;
+                        });
                     }
                 });
             });
             observer.observe(document.body, { childList: true, subtree: true });
+
+            // Check existing videos too
+            document.querySelectorAll('video').forEach(v => {
+                v.muted = true;
+                v.volume = 0;
+            });
+
+            // Check immediately
+            notifyVideo(window.location.href);
         })();
     """.trimIndent()
 
@@ -101,7 +140,7 @@ class MainActivity : AppCompatActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 databaseEnabled = true
-                mediaPlaybackRequiresUserGesture = true // prevent WebView auto-playing
+                mediaPlaybackRequiresUserGesture = false // autoplay allow
                 useWideViewPort = true
                 loadWithOverviewMode = true
                 setSupportZoom(true)
@@ -117,13 +156,30 @@ class MainActivity : AppCompatActivity() {
             setLayerType(View.LAYER_TYPE_HARDWARE, null)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
-            webViewClient = object : WebViewClient() {
+            addJavascriptInterface(object : Any() {
+                @JavascriptInterface
+                fun onVideoDetected(url: String) {
+                    runOnUiThread {
+                        if (!isExtracting && url != lastExtractedUrl) {
+                            lastExtractedUrl = url
+                            extractAndPlay(url)
+                        }
+                    }
+                }
+            }, "LumiX")
 
+            webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     view?.evaluateJavascript(hideAdsJS, null)
-                    view?.postDelayed({ view.evaluateJavascript(hideAdsJS, null) }, 1500)
-                    view?.postDelayed({ view.evaluateJavascript(hideAdsJS, null) }, 3000)
+                    view?.evaluateJavascript(interceptVideoJS, null)
+                    view?.postDelayed({
+                        view.evaluateJavascript(hideAdsJS, null)
+                        view.evaluateJavascript(interceptVideoJS, null)
+                    }, 1500)
+                    view?.postDelayed({
+                        view.evaluateJavascript(hideAdsJS, null)
+                    }, 3000)
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -132,13 +188,14 @@ class MainActivity : AppCompatActivity() {
                 ): Boolean {
                     val url = request?.url?.toString() ?: return false
 
-                    // Intercept ALL YouTube video URLs
                     if (YtDlpHelper.isYouTubeUrl(url)) {
-                        if (!isExtracting) extractAndPlay(url)
-                        return true // block WebView completely
+                        if (!isExtracting && url != lastExtractedUrl) {
+                            lastExtractedUrl = url
+                            extractAndPlay(url)
+                        }
+                        return false
                     }
 
-                    // Allow YouTube browse + Google login
                     if (url.contains("youtube.com") ||
                         url.contains("youtu.be") ||
                         url.contains("google.com") ||
@@ -147,22 +204,21 @@ class MainActivity : AppCompatActivity() {
                         return false
                     }
 
-                    // External links — browser
                     try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                     catch (e: Exception) { }
                     return true
                 }
 
-                // Block video stream requests directly
                 override fun shouldInterceptRequest(
                     view: WebView?,
                     request: WebResourceRequest?
                 ): WebResourceResponse? {
                     val url = request?.url?.toString() ?: return null
-                    // Block YouTube video streams in WebView
-                    if (url.contains("googlevideo.com") ||
-                        url.contains("videoplayback") ||
-                        url.contains("youtubei.googleapis.com/youtubei/v1/player")) {
+                    // Block ad networks
+                    if (url.contains("doubleclick.net") ||
+                        url.contains("googleadservices.com") ||
+                        url.contains("googlesyndication.com") ||
+                        url.contains("google-analytics.com")) {
                         return WebResourceResponse("text/plain", "UTF-8", null)
                     }
                     return null
@@ -170,7 +226,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             webChromeClient = object : WebChromeClient() {
-                // Block YouTube's fullscreen player completely
                 override fun onShowCustomView(view: View, callback: CustomViewCallback) {
                     callback.onCustomViewHidden()
                 }
@@ -181,9 +236,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun extractAndPlay(url: String) {
-        if (isExtracting) return
         isExtracting = true
-
         binding.layoutLoading.visibility = View.VISIBLE
         binding.tvLoadingTitle.text = "Fetching stream..."
 
