@@ -34,17 +34,17 @@ jobs:
           chmod +x gradlew
 
       - name: Download yt-dlp binaries
-  run: |
-    mkdir -p app/src/main/assets
-    curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" \
-      -o app/src/main/assets/yt-dlp_arm64
-    curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" \
-      -o app/src/main/assets/yt-dlp_armv7
-    chmod +x app/src/main/assets/yt-dlp_arm64
-    chmod +x app/src/main/assets/yt-dlp_armv7
-    # Verify size
-    ls -lh app/src/main/assets/
-    du -sh app/src/main/assets/*
+        run: |
+          mkdir -p app/src/main/assets
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" \
+            -o app/src/main/assets/yt-dlp_arm64
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_armv7l" \
+            -o app/src/main/assets/yt-dlp_armv7
+          chmod +x app/src/main/assets/yt-dlp_arm64
+          chmod +x app/src/main/assets/yt-dlp_armv7
+          # Verify size
+          ls -lh app/src/main/assets/
+          du -sh app/src/main/assets/*
 
       - name: Build Debug APKs (Fallback)
         env:
