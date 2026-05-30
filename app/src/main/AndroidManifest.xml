@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -30,20 +31,18 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:launchMode="singleTop"
-            android:screenOrientation="unspecified" />
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleTop" />
 
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false" />
 
+        <!-- ExoPlayer foreground service -->
         <service
             android:name=".service.PlayerService"
-            android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
+            android:foregroundServiceType="mediaPlayback" />
 
     </application>
 
