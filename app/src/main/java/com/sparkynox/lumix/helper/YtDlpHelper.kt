@@ -1,67 +1,52 @@
 package com.sparkynox.lumix.helper
 
 import android.content.Context
-import com.sparkynox.lumix.model.StreamInfo
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import android.os.Build
+import java.io.File
 
-object YtDlpHelper {
+object YtDlpInstaller {
 
-    suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
-        val binary = YtDlpInstaller.getBinaryFile(context)
-        if (!binary.exists()) throw Exception("yt-dlp not found")
-
-        val process = ProcessBuilder(
-            binary.absolutePath,
-            "--dump-single-json",
-            "--no-playlist",
-            "--format", "bestaudio[ext=m4a]/bestaudio/best",
-            "--no-warnings",
-            "--no-check-certificates",
-            url
-        ).redirectErrorStream(true).start()
-
-        val output = process.inputStream.bufferedReader().readText()
-        process.waitFor()
-
-        val json = JSONObject(output)
-        val videoId = json.optString("id", "")
-        val title = json.optString("title", "Unknown")
-        val uploader = json.optString("uploader", "")
-        val thumbnail = json.optString("thumbnail", "https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
-        val duration = json.optLong("duration", 0L)
-        val streamUrl = json.optString("url", "")
-
-        if (streamUrl.isEmpty()) throw Exception("No stream URL found")
-
-        StreamInfo(
-            videoId = videoId,
-            title = title,
-            uploader = uploader,
-            thumbnailUrl = thumbnail,
-            duration = duration,
-            streamUrl = streamUrl
-        )
-    }
-
-    fun extractVideoId(url: String): String? {
-        val patterns = listOf(
-            Regex("(?:v=|youtu\\.be/)([A-Za-z0-9_-]{11})"),
-            Regex("(?:embed/)([A-Za-z0-9_-]{11})")
-        )
-        for (p in patterns) {
-            val match = p.find(url)
-            if (match != null) return match.groupValues[1]
+    fun install(context: Context) {
+        val binary = getBinaryFile(context)
+        // Agar exists hai but size 0 hai — delete karke dobara copy karo
+        if (binary.exists() && binary.length() < 1000) {
+            binary.delete()
         }
-        return null
+        if (!binary.exists()) {
+            copyFromAssets(context, binary)
+        }
+        binary.setExecutable(true, false)
     }
 
-    fun isYouTubeUrl(url: String): Boolean {
-        return url.contains("youtube.com/watch") ||
-               url.contains("youtu.be/") ||
-               url.contains("youtube.com/shorts/") ||
-               url.contains("youtube.com/v/") ||
-               (url.contains("youtube.com") && url.contains("v="))
+    fun getBinaryFile(context: Context): File {
+        return File(context.filesDir, "yt-dlp")
+    }
+
+    private fun copyFromAssets(context: Context, dest: File) {
+        val assetName = when {
+            Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "yt-dlp_arm64"
+            else -> "yt-dlp_armv7"
+        }
+        try {
+            val assetList = context.assets.list("") ?: emptyArray()
+            if (!assetList.contains(assetName)) {
+                // Try other binary name
+                val fallback = if (assetName == "yt-dlp_arm64") "yt-dlp_armv7" else "yt-dlp_arm64"
+                if (assetList.contains(fallback)) {
+                    copyAsset(context, fallback, dest)
+                }
+                return
+            }
+            copyAsset(context, assetName, dest)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun copyAsset(context: Context, assetName: String, dest: File) {
+        context.assets.open(assetName).use { input ->
+            dest.outputStream().use { input.copyTo(it) }
+        }
+        dest.setExecutable(true, false)
     }
 }
