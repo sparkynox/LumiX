@@ -33,33 +33,6 @@ jobs:
           gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
-      - name: Download yt-dlp binaries
-        run: |
-          mkdir -p app/src/main/assets
-
-          # Use specific version — latest can be too large or fail
-          YT_DLP_VERSION="2024.03.10"
-
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp_linux_aarch64" \
-            -o app/src/main/assets/yt-dlp_arm64
-
-          # armv7l not available as single binary — use arm64 for both (fallback in YtDlpInstaller handles it)
-          curl -L "https://github.com/yt-dlp/yt-dlp/releases/download/${YT_DLP_VERSION}/yt-dlp_linux_aarch64" \
-            -o app/src/main/assets/yt-dlp_armv7
-
-          chmod +x app/src/main/assets/yt-dlp_arm64
-          chmod +x app/src/main/assets/yt-dlp_armv7
-
-          # Verify — fail build if too small
-          ARM64_SIZE=$(stat -c%s app/src/main/assets/yt-dlp_arm64)
-          echo "ARM64 size: $ARM64_SIZE bytes"
-          if [ "$ARM64_SIZE" -lt 1000000 ]; then
-            echo "ERROR: yt-dlp download failed — file too small!"
-            exit 1
-          fi
-          echo "yt-dlp downloaded successfully!"
-          ls -lh app/src/main/assets/
-
       - name: Create google-services.json
         run: |
           echo '{
@@ -73,19 +46,6 @@ jobs:
                   "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
                   "android_client_info": {
                     "package_name": "com.sparkynox.lumix"
-                  }
-                },
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDSoeh8DBJMnvNa7-84su5CAn-2AfCBI34"
-                  }
-                ]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:464309606770:android:b361b559a76187d13425eb",
-                  "android_client_info": {
-                    "package_name": "com.sparkynox.lumix.debug"
                   }
                 },
                 "api_key": [
@@ -132,18 +92,11 @@ jobs:
           name: "LumiX Build #${{ github.run_number }}"
           body: |
             ## LumiX APK Build
-            
-            **Build Date:** $(date)
             **Commit:** ${{ github.event.head_commit.message }}
-            
-            ### 📱 APKs:
-            - ARM64 (64-bit): Download below
-            - ARMv7 (32-bit): Download below
-            
-            ### Installation:
-            1. Download APK for your device
-            2. Enable "Unknown sources" in settings
-            3. Install and enjoy!
+            ### Install:
+            1. Download APK
+            2. Enable Unknown sources
+            3. Install!
           draft: false
           prerelease: false
           files: |
