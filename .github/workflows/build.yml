@@ -57,6 +57,15 @@ jobs:
             ]
           }' > app/google-services.json
 
+        - name: Add string resources
+  run: |
+    mkdir -p app/src/main/res/values
+    if ! grep -q "default_web_client_id" app/src/main/res/values/strings.xml 2>/dev/null; then
+      echo '<resources>
+        <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
+      </resources>' > app/src/main/res/values/ids.xml
+    fi
+
       - name: Build Release APKs
         id: buildRelease
         env:
