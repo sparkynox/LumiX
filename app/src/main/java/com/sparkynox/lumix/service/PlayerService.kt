@@ -36,9 +36,6 @@ class PlayerService : Service() {
         instance = this
         createChannel()
         mediaSession = MediaSessionCompat(this, "LumiX")
-
-        // CRITICAL — call startForeground immediately
-        // Android 8+ requires this within 5 seconds
         startForeground(NOTIF_ID, buildNotification("Lumi X", "Ready", false))
 
         player = ExoPlayer.Builder(this)
@@ -46,10 +43,9 @@ class PlayerService : Service() {
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .build(),
-                true // handle audio focus automatically
+                    .build(), true
             )
-            .setHandleAudioBecomingNoisy(true) // pause on headphone unplug
+            .setHandleAudioBecomingNoisy(true)
             .build().apply {
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -72,11 +68,8 @@ class PlayerService : Service() {
                     .setUri(url)
                     .setMediaMetadata(
                         androidx.media3.common.MediaMetadata.Builder()
-                            .setTitle(title)
-                            .setArtist(uploader)
-                            .build()
-                    )
-                    .build()
+                            .setTitle(title).setArtist(uploader).build()
+                    ).build()
 
                 player?.apply {
                     stop()
@@ -84,23 +77,17 @@ class PlayerService : Service() {
                     prepare()
                     playWhenReady = true
                 }
-
                 startForeground(NOTIF_ID, buildNotification(title, uploader, true))
             }
-
             ACTION_PAUSE_RESUME -> {
-                player?.let {
-                    if (it.isPlaying) it.pause() else it.play()
-                }
+                player?.let { if (it.isPlaying) it.pause() else it.play() }
             }
-
             ACTION_STOP -> {
                 player?.stop()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } else {
-                    @Suppress("DEPRECATION")
-                    stopForeground(true)
+                    @Suppress("DEPRECATION") stopForeground(true)
                 }
                 stopSelf()
             }
@@ -115,17 +102,14 @@ class PlayerService : Service() {
 
     private fun buildNotification(title: String, uploader: String, isPlaying: Boolean): Notification {
         val openIntent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
-        val pauseResumeIntent = PendingIntent.getService(
+        val pauseIntent = PendingIntent.getService(
             this, 1,
             Intent(this, PlayerService::class.java).apply { action = ACTION_PAUSE_RESUME },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
         val stopIntent = PendingIntent.getService(
             this, 2,
             Intent(this, PlayerService::class.java).apply { action = ACTION_STOP },
@@ -139,15 +123,12 @@ class PlayerService : Service() {
             .setContentIntent(openIntent)
             .addAction(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-                if (isPlaying) "Pause" else "Play",
-                pauseResumeIntent
+                if (isPlaying) "Pause" else "Play", pauseIntent
             )
             .addAction(R.drawable.ic_close, "Stop", stopIntent)
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1)
-                    .setMediaSession(mediaSession?.sessionToken)
-            )
+            .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+                .setShowActionsInCompactView(0, 1)
+                .setMediaSession(mediaSession?.sessionToken))
             .setOngoing(isPlaying)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -158,15 +139,9 @@ class PlayerService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Lumi X Player",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setSound(null, null)
-                description = "Now playing"
-            }
-            getSystemService(NotificationManager::class.java)
-                ?.createNotificationChannel(channel)
+                CHANNEL_ID, "Lumi X Player", NotificationManager.IMPORTANCE_LOW
+            ).apply { setSound(null, null) }
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 
