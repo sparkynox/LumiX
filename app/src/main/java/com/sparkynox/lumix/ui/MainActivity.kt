@@ -1,18 +1,22 @@
+// MainActivity.kt
 package com.sparkynox.lumix.ui
 
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
+import android.view.WindowManager
+import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
 import com.sparkynox.lumix.databinding.ActivityMainBinding
 import com.sparkynox.lumix.helper.YtDlpHelper
-import com.sparkynox.lumix.model.VideoItem
+import com.sparkynox.lumix.model.StreamInfo
 import com.sparkynox.lumix.service.PlayerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,151 +25,237 @@ import kotlinx.coroutines.withContext
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val adapter = VideoAdapter { video -> playVideo(video) }
     private var isExtracting = false
+    private var lastExtractedUrl = ""
 
+    private val hideAdsJS = """
+        (function() {
+            if (window._lumiAds) return;
+            window._lumiAds = true;
+            const style = document.createElement('style');
+            style.textContent = `
+                ytd-ad-slot-renderer, ytd-banner-promo-renderer,
+                ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer,
+                ytd-display-ad-renderer, #masthead-ad,
+                ytd-promoted-video-renderer, ytd-promoted-sparkles-web-renderer,
+                .video-ads, .ytp-ad-module, #player-ads,
+                .ytp-ad-overlay-container, .ytp-ad-player-overlay,
+                .ytp-ad-progress-list, .ytp-ad-skip-button-container {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                }
+            `;
+            document.head && document.head.appendChild(style);
+
+            setInterval(() => {
+                document.querySelectorAll(
+                    '.ytp-ad-skip-button, .ytp-skip-ad-button, .ytp-ad-skip-button-modern'
+                ).forEach(btn => { try { btn.click(); } catch(e) {} });
+            }, 200);
+        })();
+    """.trimIndent()
+
+    private val interceptVideoJS = """
+        (function() {
+            if (window._lumiIntercept) return;
+            window._lumiIntercept = true;
+
+            function notifyVideo(url) {
+                if (url.includes('watch?v=') || url.includes('/shorts/')) {
+                    try { window.LumiX.onVideoDetected(url); } catch(e) {}
+                }
+            }
+
+            // SPA URL change detection
+            let lastUrl = '';
+            setInterval(() => {
+                const current = window.location.href;
+                if (current !== lastUrl) {
+                    lastUrl = current;
+                    notifyVideo(current);
+                }
+            }, 500);
+
+            // Mute WebView video — ExoPlayer handles audio
+            const observer = new MutationObserver(() => {
+                document.querySelectorAll('video').forEach(v => {
+                    if (!v._lumiBlocked) {
+                        v._lumiBlocked = true;
+                        v.addEventListener('play', () => {
+                            v.muted = true;
+                            v.volume = 0;
+                            notifyVideo(window.location.href);
+                        });
+                        v.addEventListener('loadstart', () => {
+                            v.muted = true;
+                            v.volume = 0;
+                        });
+                    }
+                });
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+
+            document.querySelectorAll('video').forEach(v => {
+                v.muted = true;
+                v.volume = 0;
+            });
+
+            notifyVideo(window.location.href);
+        })();
+    """.trimIndent()
+
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        startPlayerService()
-        setupRecycler()
-        setupSearch()
-        setupBottomNav()
-        loadTrending()
-    }
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-    private fun startPlayerService() {
-        val intent = Intent(this, PlayerService::class.java)
+        // Init NewPipeExtractor in background
+        lifecycleScope.launch(Dispatchers.IO) {
+            YtDlpHelper.init()
+        }
+
+        val serviceIntent = Intent(this, PlayerService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
+            startForegroundService(serviceIntent)
         } else {
-            startService(intent)
-        }
-    }
-
-    private fun setupRecycler() {
-        binding.rvVideos.layoutManager = LinearLayoutManager(this)
-        binding.rvVideos.adapter = adapter
-        binding.swipeRefresh.setOnRefreshListener { loadTrending() }
-        binding.swipeRefresh.setColorSchemeColors(getColor(com.sparkynox.lumix.R.color.accent))
-    }
-
-    private fun setupSearch() {
-        binding.etSearch.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                doSearch()
-                true
-            } else false
+            startService(serviceIntent)
         }
 
-        binding.btnSearch.setOnClickListener { doSearch() }
+        setupWebView()
+        setupMiniPlayer()
+        setupButtons()
     }
 
-    private fun setupBottomNav() {
-        binding.btnHome.setOnClickListener {
-            setActiveTab(0)
-            loadTrending()
-        }
-
-        binding.btnSearchTab.setOnClickListener {
-            setActiveTab(1)
-            binding.searchBar.visibility = View.VISIBLE
-            binding.etSearch.requestFocus()
-        }
-
-        binding.btnSettings.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-    }
-
-    private fun setActiveTab(tab: Int) {
-        binding.btnHome.alpha = if (tab == 0) 1f else 0.5f
-        binding.btnSearchTab.alpha = if (tab == 1) 1f else 0.5f
-        if (tab == 0) binding.searchBar.visibility = View.GONE
-    }
-
-    private fun doSearch() {
-        val query = binding.etSearch.text.toString().trim()
-        if (query.isEmpty()) return
-
-        // Hide keyboard
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.etSearch.windowToken, 0)
-
-        binding.progressBar.visibility = View.VISIBLE
-        binding.tvEmpty.visibility = View.GONE
-
-        lifecycleScope.launch {
-            try {
-                val results = withContext(Dispatchers.IO) {
-                    YtDlpHelper.search(query)
-                }
-                adapter.submitList(results)
-                binding.tvEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Search failed: ${e.message}", Toast.LENGTH_LONG).show()
-            } finally {
-                binding.progressBar.visibility = View.GONE
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        binding.webView.apply {
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                mediaPlaybackRequiresUserGesture = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                allowContentAccess = true
+                loadsImagesAutomatically = true
+                cacheMode = WebSettings.LOAD_DEFAULT
+                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
             }
-        }
-    }
 
-    private fun loadTrending() {
-        binding.progressBar.visibility = View.VISIBLE
-        binding.tvEmpty.visibility = View.GONE
-        binding.swipeRefresh.isRefreshing = false
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
-        lifecycleScope.launch {
-            try {
-                val videos = withContext(Dispatchers.IO) {
-                    YtDlpHelper.getTrending()
+            // JS Interface — video URL detect karo
+            addJavascriptInterface(object : Any() {
+                @JavascriptInterface
+                fun onVideoDetected(url: String) {
+                    runOnUiThread {
+                        if (!isExtracting && url != lastExtractedUrl) {
+                            lastExtractedUrl = url
+                            extractAndPlay(url)
+                        }
+                    }
                 }
-                adapter.submitList(videos)
-                binding.tvEmpty.visibility = if (videos.isEmpty()) View.VISIBLE else View.GONE
-            } catch (e: Exception) {
-                binding.tvEmpty.text = "Failed to load: ${e.message}"
-                binding.tvEmpty.visibility = View.VISIBLE
-            } finally {
-                binding.progressBar.visibility = View.GONE
-                binding.swipeRefresh.isRefreshing = false
+            }, "LumiX")
+
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    view?.evaluateJavascript(hideAdsJS, null)
+                    view?.evaluateJavascript(interceptVideoJS, null)
+                    view?.postDelayed({
+                        view.evaluateJavascript(hideAdsJS, null)
+                        view.evaluateJavascript(interceptVideoJS, null)
+                    }, 1500)
+                    view?.postDelayed({
+                        view.evaluateJavascript(hideAdsJS, null)
+                    }, 3000)
+                }
+
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+
+                    if (YtDlpHelper.isYouTubeUrl(url)) {
+                        if (!isExtracting && url != lastExtractedUrl) {
+                            lastExtractedUrl = url
+                            extractAndPlay(url)
+                        }
+                        return false
+                    }
+
+                    if (url.contains("youtube.com") ||
+                        url.contains("youtu.be") ||
+                        url.contains("google.com") ||
+                        url.contains("accounts.google") ||
+                        url.contains("googleapis.com")) {
+                        return false
+                    }
+
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    catch (e: Exception) { }
+                    return true
+                }
+
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    val url = request?.url?.toString() ?: return null
+                    // Block ad networks
+                    if (url.contains("doubleclick.net") ||
+                        url.contains("googleadservices.com") ||
+                        url.contains("googlesyndication.com") ||
+                        url.contains("google-analytics.com")) {
+                        return WebResourceResponse("text/plain", "UTF-8", null)
+                    }
+                    return null
+                }
             }
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                    // Block YouTube's own player
+                    callback.onCustomViewHidden()
+                }
+            }
+
+            loadUrl("https://m.youtube.com")
         }
     }
 
-    private fun playVideo(video: VideoItem) {
-        if (isExtracting) return
+    private fun extractAndPlay(url: String) {
         isExtracting = true
-
-        // Show mini player loading
         binding.layoutMiniPlayer.visibility = View.VISIBLE
-        binding.tvMiniTitle.text = video.title
-        binding.tvMiniChannel.text = video.channelName
-
-        com.bumptech.glide.Glide.with(this)
-            .load(video.thumbnailUrl)
-            .centerCrop()
-            .into(binding.imgMiniThumb)
+        binding.tvMiniTitle.text = "Loading..."
+        binding.tvMiniChannel.text = ""
 
         lifecycleScope.launch {
             try {
                 val info = withContext(Dispatchers.IO) {
-                    YtDlpHelper.extract(applicationContext, video.url)
+                    YtDlpHelper.extract(applicationContext, url)
                 }
 
-                // Play in service
-                val intent = Intent(this@MainActivity, PlayerService::class.java).apply {
-                    action = PlayerService.ACTION_PLAY
-                    putExtra(PlayerService.EXTRA_URL, info.streamUrl)
-                    putExtra(PlayerService.EXTRA_TITLE, info.title)
-                    putExtra(PlayerService.EXTRA_UPLOADER, info.uploader)
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
+                // Update mini player
+                binding.tvMiniTitle.text = info.title
+                binding.tvMiniChannel.text = info.uploader
+                Glide.with(this@MainActivity)
+                    .load(info.thumbnailUrl)
+                    .centerCrop()
+                    .into(binding.imgMiniThumb)
+
+                playInService(info)
 
             } catch (e: Exception) {
                 binding.layoutMiniPlayer.visibility = View.GONE
@@ -178,19 +268,52 @@ class MainActivity : AppCompatActivity() {
                 isExtracting = false
             }
         }
+    }
 
-        // Mini player controls
+    private fun playInService(info: StreamInfo) {
+        val intent = Intent(this, PlayerService::class.java).apply {
+            action = PlayerService.ACTION_PLAY
+            putExtra(PlayerService.EXTRA_URL, info.streamUrl)
+            putExtra(PlayerService.EXTRA_TITLE, info.title)
+            putExtra(PlayerService.EXTRA_UPLOADER, info.uploader)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun setupMiniPlayer() {
+        binding.btnMiniPause.setOnClickListener {
+            startService(Intent(this, PlayerService::class.java).apply {
+                action = PlayerService.ACTION_PAUSE_RESUME
+            })
+        }
         binding.btnMiniClose.setOnClickListener {
             binding.layoutMiniPlayer.visibility = View.GONE
             startService(Intent(this, PlayerService::class.java).apply {
                 action = PlayerService.ACTION_STOP
             })
         }
+    }
 
-        binding.btnMiniPause.setOnClickListener {
-            startService(Intent(this, PlayerService::class.java).apply {
-                action = PlayerService.ACTION_PAUSE_RESUME
-            })
+    private fun setupButtons() {
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && binding.webView.canGoBack()) {
+            binding.webView.goBack()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onDestroy() {
+        binding.webView.destroy()
+        super.onDestroy()
     }
 }
