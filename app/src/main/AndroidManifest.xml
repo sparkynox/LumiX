@@ -31,14 +31,12 @@
         <activity
             android:name=".ui.MainActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
             android:launchMode="singleTop" />
 
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false" />
 
-        <!-- ExoPlayer foreground service -->
         <service
             android:name=".service.PlayerService"
             android:exported="false"
