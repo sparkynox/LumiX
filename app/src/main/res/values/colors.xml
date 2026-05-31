@@ -5,7 +5,6 @@
     <color name="bg_card">#212121</color>
     <color name="bg_surface">#272727</color>
     <color name="accent">#B8A9F5</color>
-    <color name="accent_dark">#8B7FCC</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#AAAAAA</color>
     <color name="text_hint">#666666</color>
