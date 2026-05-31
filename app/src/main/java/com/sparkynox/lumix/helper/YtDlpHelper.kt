@@ -30,15 +30,18 @@ object YtDlpHelper {
 
         init()
 
+        // 🔁 CHANGE 1: Normalize URL (remove playlist garbage)
+        val cleanUrl = normalizeYoutubeUrl(url)
+
         val service = ServiceList.YouTube
 
         val extractor = service.getStreamExtractor(
-            service.streamLHFactory.fromUrl(url)
+            service.streamLHFactory.fromUrl(cleanUrl)   // 🔁 use cleanUrl instead of raw url
         )
 
         extractor.fetchPage()
 
-        val videoId = extractVideoId(url) ?: ""
+        val videoId = extractVideoId(cleanUrl) ?: ""
         val title = extractor.name ?: "Unknown"
         val uploader = extractor.uploaderName ?: ""
         val duration = extractor.length
@@ -72,23 +75,21 @@ object YtDlpHelper {
         )
     }
 
+    // 🔁 CHANGE 2: Replace extractVideoId with a single robust regex
     fun extractVideoId(url: String): String? {
-
-        val patterns = listOf(
-            Regex("(?:v=|youtu\\.be/)([A-Za-z0-9_-]{11})"),
-            Regex("(?:shorts/)([A-Za-z0-9_-]{11})"),
-            Regex("(?:embed/)([A-Za-z0-9_-]{11})")
+        val regex = Regex(
+            "(?:v=|youtu\\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})"
         )
+        return regex.find(url)?.groupValues?.getOrNull(1)
+    }
 
-        for (pattern in patterns) {
-            val match = pattern.find(url)
-
-            if (match != null) {
-                return match.groupValues[1]
-            }
+    // 🔁 CHANGE 3: New helper function to clean YouTube URLs
+    fun normalizeYoutubeUrl(url: String): String {
+        val videoId = extractVideoId(url)
+        if (videoId.isNullOrEmpty()) {
+            return url
         }
-
-        return null
+        return "https://www.youtube.com/watch?v=$videoId"
     }
 
     fun isYouTubeUrl(url: String): Boolean {
