@@ -2,238 +2,119 @@ package com.sparkynox.lumix.helper
 
 import android.content.Context
 import com.sparkynox.lumix.model.StreamInfo
+import com.sparkynox.lumix.model.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.downloader.Request
+import org.schabi.newpipe.extractor.downloader.Response
+import org.schabi.newpipe.extractor.stream.AudioStream
 import java.net.HttpURLConnection
 import java.net.URL
 
 object YtDlpHelper {
 
-    private const val API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+    private var initialized = false
 
+    fun init() {
+        if (!initialized) {
+            NewPipe.init(LumiXDownloader)
+            initialized = true
+        }
+    }
+
+    // Extract stream URL from YouTube video
     suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
-        val videoId = extractVideoId(url)
-            ?: throw Exception("Invalid YouTube URL")
-
-        // Try Android client first
-        try {
-            return@withContext fetchWithAndroidClient(videoId)
-        } catch (e: Exception) {
-            // Fallback to iOS client
-            try {
-                return@withContext fetchWithIosClient(videoId)
-            } catch (e2: Exception) {
-                // Last fallback — Invidious
-                return@withContext fetchFromInvidious(videoId)
-            }
-        }
-    }
-
-    private fun fetchWithAndroidClient(videoId: String): StreamInfo {
-        val body = JSONObject().apply {
-            put("videoId", videoId)
-            put("context", JSONObject().apply {
-                put("client", JSONObject().apply {
-                    put("clientName", "ANDROID")
-                    put("clientVersion", "19.09.37")
-                    put("androidSdkVersion", 30)
-                    put("hl", "en")
-                    put("gl", "US")
-                    put("utcOffsetMinutes", 0)
-                })
-            })
-            put("params", "2AMBCgIQBg==")
-            put("playbackContext", JSONObject().apply {
-                put("contentPlaybackContext", JSONObject().apply {
-                    put("html5Preference", "HTML5_PREF_WANTS")
-                })
-            })
-        }.toString()
-
-        val conn = (URL("https://www.youtube.com/youtubei/v1/player?key=$API_KEY&prettyPrint=false")
-            .openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("User-Agent", "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip")
-            setRequestProperty("X-YouTube-Client-Name", "3")
-            setRequestProperty("X-YouTube-Client-Version", "19.09.37")
-            setRequestProperty("Origin", "https://www.youtube.com")
-            doOutput = true
-            connectTimeout = 12000
-            readTimeout = 15000
-        }
-
-        conn.outputStream.use { it.write(body.toByteArray()) }
-
-        val code = conn.responseCode
-        if (code != 200) throw Exception("Android client HTTP $code")
-
-        val response = conn.inputStream.bufferedReader().readText()
-        conn.disconnect()
-
-        return parsePlayerResponse(response, videoId)
-    }
-
-    private fun fetchWithIosClient(videoId: String): StreamInfo {
-        val body = JSONObject().apply {
-            put("videoId", videoId)
-            put("context", JSONObject().apply {
-                put("client", JSONObject().apply {
-                    put("clientName", "IOS")
-                    put("clientVersion", "19.09.3")
-                    put("deviceModel", "iPhone14,3")
-                    put("hl", "en")
-                    put("gl", "US")
-                    put("utcOffsetMinutes", 0)
-                })
-            })
-        }.toString()
-
-        val conn = (URL("https://www.youtube.com/youtubei/v1/player?key=$API_KEY&prettyPrint=false")
-            .openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("User-Agent", "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)")
-            setRequestProperty("X-YouTube-Client-Name", "5")
-            setRequestProperty("X-YouTube-Client-Version", "19.09.3")
-            doOutput = true
-            connectTimeout = 12000
-            readTimeout = 15000
-        }
-
-        conn.outputStream.use { it.write(body.toByteArray()) }
-
-        val code = conn.responseCode
-        if (code != 200) throw Exception("iOS client HTTP $code")
-
-        val response = conn.inputStream.bufferedReader().readText()
-        conn.disconnect()
-
-        return parsePlayerResponse(response, videoId)
-    }
-
-    private fun fetchFromInvidious(videoId: String): StreamInfo {
-        val instances = listOf(
-            "https://inv.nadeko.net",
-            "https://invidious.io.lol",
-            "https://yt.drgnz.club"
+        init()
+        val service = ServiceList.YouTube
+        val extractor = service.getStreamExtractor(
+            service.streamLHFactory.fromUrl(url)
         )
+        extractor.fetchPage()
 
-        var lastError = ""
-        for (instance in instances) {
-            try {
-                val conn = (URL("$instance/api/v1/videos/$videoId")
-                    .openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10000
-                    readTimeout = 15000
-                    setRequestProperty("User-Agent", "Mozilla/5.0")
-                }
+        val videoId = extractVideoId(url) ?: ""
+        val title = extractor.name ?: "Unknown"
+        val uploader = extractor.uploaderName ?: ""
+        val duration = extractor.length
+        val thumbnail = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-                if (conn.responseCode != 200) continue
+        // Get best audio stream — no video, no ads
+        val audioStreams: List<AudioStream> = extractor.audioStreams
+            ?: throw Exception("No audio streams")
 
-                val json = JSONObject(conn.inputStream.bufferedReader().readText())
-                conn.disconnect()
+        val bestAudio = audioStreams.maxByOrNull { it.averageBitrate }
+            ?: throw Exception("No audio stream found")
 
-                val title = json.optString("title", "Unknown")
-                val uploader = json.optString("author", "")
-                val duration = json.optLong("lengthSeconds", 0L)
+        val streamUrl = bestAudio.content
+        if (streamUrl.isNullOrEmpty()) throw Exception("Empty stream URL")
 
-                var streamUrl = ""
-                val adaptiveFormats = json.optJSONArray("adaptiveFormats")
-                if (adaptiveFormats != null) {
-                    for (i in 0 until adaptiveFormats.length()) {
-                        val fmt = adaptiveFormats.getJSONObject(i)
-                        val type = fmt.optString("type", "")
-                        val u = fmt.optString("url", "")
-                        if (u.isNotEmpty() && type.contains("audio/mp4")) {
-                            streamUrl = u
-                            break
-                        }
-                    }
-                }
-
-                if (streamUrl.isEmpty()) {
-                    val formats = json.optJSONArray("formatStreams")
-                    if (formats != null && formats.length() > 0) {
-                        streamUrl = formats.getJSONObject(0).optString("url", "")
-                    }
-                }
-
-                if (streamUrl.isEmpty()) continue
-
-                return StreamInfo(
-                    videoId = videoId,
-                    title = title,
-                    uploader = uploader,
-                    thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
-                    duration = duration,
-                    streamUrl = streamUrl
-                )
-            } catch (e: Exception) {
-                lastError = e.message ?: ""
-                continue
-            }
-        }
-        throw Exception("All sources failed: $lastError")
-    }
-
-    private fun parsePlayerResponse(response: String, videoId: String): StreamInfo {
-        val json = JSONObject(response)
-
-        val playability = json.optJSONObject("playabilityStatus")
-        val status = playability?.optString("status", "") ?: ""
-        if (status == "ERROR" || status == "UNPLAYABLE") {
-            throw Exception(playability?.optString("reason", "Unavailable") ?: "Unavailable")
-        }
-
-        val videoDetails = json.optJSONObject("videoDetails")
-            ?: throw Exception("No video details")
-
-        val title = videoDetails.optString("title", "Unknown")
-        val uploader = videoDetails.optString("author", "")
-        val duration = videoDetails.optString("lengthSeconds", "0").toLongOrNull() ?: 0L
-
-        val streamingData = json.optJSONObject("streamingData")
-            ?: throw Exception("No streaming data")
-
-        var streamUrl = ""
-
-        // Audio only formats first
-        val adaptiveFormats = streamingData.optJSONArray("adaptiveFormats")
-        if (adaptiveFormats != null) {
-            for (i in 0 until adaptiveFormats.length()) {
-                val fmt = adaptiveFormats.getJSONObject(i)
-                val mimeType = fmt.optString("mimeType", "")
-                val u = fmt.optString("url", "")
-                if (u.isNotEmpty() && mimeType.contains("audio/mp4")) {
-                    streamUrl = u
-                    break
-                }
-            }
-        }
-
-        // Fallback to video+audio formats
-        if (streamUrl.isEmpty()) {
-            val formats = streamingData.optJSONArray("formats")
-            if (formats != null) {
-                for (i in 0 until formats.length()) {
-                    val u = formats.getJSONObject(i).optString("url", "")
-                    if (u.isNotEmpty()) { streamUrl = u; break }
-                }
-            }
-        }
-
-        if (streamUrl.isEmpty()) throw Exception("No stream URL")
-
-        return StreamInfo(
+        StreamInfo(
             videoId = videoId,
             title = title,
             uploader = uploader,
-            thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+            thumbnailUrl = thumbnail,
             duration = duration,
             streamUrl = streamUrl
         )
+    }
+
+    // Search YouTube
+    suspend fun search(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
+        init()
+        val service = ServiceList.YouTube
+        val extractor = service.getSearchExtractor(query)
+        extractor.fetchPage()
+
+        val items = mutableListOf<VideoItem>()
+        extractor.initialPage.items.forEach { item ->
+            try {
+                val streamItem = item as? org.schabi.newpipe.extractor.stream.StreamInfoItem
+                    ?: return@forEach
+                items.add(
+                    VideoItem(
+                        videoId = extractVideoId(streamItem.url) ?: "",
+                        title = streamItem.name ?: "",
+                        channelName = streamItem.uploaderName ?: "",
+                        thumbnailUrl = streamItem.thumbnails.firstOrNull()?.url
+                            ?: "https://i.ytimg.com/vi/${extractVideoId(streamItem.url)}/hqdefault.jpg",
+                        duration = streamItem.duration,
+                        url = streamItem.url
+                    )
+                )
+            } catch (e: Exception) { }
+        }
+        items
+    }
+
+    // Get trending / home feed
+    suspend fun getTrending(): List<VideoItem> = withContext(Dispatchers.IO) {
+        init()
+        val service = ServiceList.YouTube
+        val extractor = service.getKioskList().getExtractorById("Trending", null)
+        extractor.fetchPage()
+
+        val items = mutableListOf<VideoItem>()
+        extractor.initialPage.items.forEach { item ->
+            try {
+                val streamItem = item as? org.schabi.newpipe.extractor.stream.StreamInfoItem
+                    ?: return@forEach
+                val vidId = extractVideoId(streamItem.url) ?: return@forEach
+                items.add(
+                    VideoItem(
+                        videoId = vidId,
+                        title = streamItem.name ?: "",
+                        channelName = streamItem.uploaderName ?: "",
+                        thumbnailUrl = streamItem.thumbnails.firstOrNull()?.url
+                            ?: "https://i.ytimg.com/vi/$vidId/hqdefault.jpg",
+                        duration = streamItem.duration,
+                        url = streamItem.url
+                    )
+                )
+            } catch (e: Exception) { }
+        }
+        items
     }
 
     fun extractVideoId(url: String): String? {
@@ -255,5 +136,47 @@ object YtDlpHelper {
                url.contains("youtube.com/shorts/") ||
                url.contains("youtube.com/v/") ||
                (url.contains("youtube.com") && url.contains("v="))
+    }
+
+    fun formatDuration(seconds: Long): String {
+        if (seconds <= 0) return ""
+        val h = seconds / 3600
+        val m = (seconds % 3600) / 60
+        val s = seconds % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%d:%02d", m, s)
+    }
+}
+
+// NewPipe requires a Downloader implementation
+object LumiXDownloader : Downloader() {
+    override fun execute(request: Request): Response {
+        val conn = (URL(request.url()).openConnection() as HttpURLConnection).apply {
+            requestMethod = request.httpMethod()
+            connectTimeout = 15000
+            readTimeout = 20000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0")
+            request.headers().forEach { (key, values) ->
+                values.forEach { value -> setRequestProperty(key, value) }
+            }
+            if (request.dataToSend() != null) {
+                doOutput = true
+                outputStream.use { it.write(request.dataToSend()) }
+            }
+        }
+
+        val responseCode = conn.responseCode
+        val responseBody = try {
+            conn.inputStream.bufferedReader().readText()
+        } catch (e: Exception) {
+            conn.errorStream?.bufferedReader()?.readText() ?: ""
+        }
+
+        val headers = conn.headerFields
+            .filterKeys { it != null }
+            .mapValues { it.value.joinToString(",") }
+
+        conn.disconnect()
+        return Response(responseCode, conn.responseMessage, headers, responseBody, request.url())
     }
 }
