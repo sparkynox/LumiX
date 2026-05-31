@@ -2,7 +2,6 @@ package com.sparkynox.lumix.helper
 
 import android.content.Context
 import com.sparkynox.lumix.model.StreamInfo
-import com.sparkynox.lumix.model.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.NewPipe
@@ -10,7 +9,6 @@ import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.stream.AudioStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -25,9 +23,9 @@ object YtDlpHelper {
         }
     }
 
-    // Extract stream URL from YouTube video
     suspend fun extract(context: Context, url: String): StreamInfo = withContext(Dispatchers.IO) {
         init()
+
         val service = ServiceList.YouTube
         val extractor = service.getStreamExtractor(
             service.streamLHFactory.fromUrl(url)
@@ -40,12 +38,12 @@ object YtDlpHelper {
         val duration = extractor.length
         val thumbnail = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
-        // Get best audio stream — no video, no ads
-        val audioStreams: List<AudioStream> = extractor.audioStreams
-            ?: throw Exception("No audio streams")
+        // Audio only — no ads, no video, fast
+        val audioStreams = extractor.audioStreams
+        if (audioStreams.isNullOrEmpty()) throw Exception("No audio streams found")
 
         val bestAudio = audioStreams.maxByOrNull { it.averageBitrate }
-            ?: throw Exception("No audio stream found")
+            ?: throw Exception("No audio stream")
 
         val streamUrl = bestAudio.content
         if (streamUrl.isNullOrEmpty()) throw Exception("Empty stream URL")
@@ -58,63 +56,6 @@ object YtDlpHelper {
             duration = duration,
             streamUrl = streamUrl
         )
-    }
-
-    // Search YouTube
-    suspend fun search(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
-        init()
-        val service = ServiceList.YouTube
-        val extractor = service.getSearchExtractor(query)
-        extractor.fetchPage()
-
-        val items = mutableListOf<VideoItem>()
-        extractor.initialPage.items.forEach { item ->
-            try {
-                val streamItem = item as? org.schabi.newpipe.extractor.stream.StreamInfoItem
-                    ?: return@forEach
-                items.add(
-                    VideoItem(
-                        videoId = extractVideoId(streamItem.url) ?: "",
-                        title = streamItem.name ?: "",
-                        channelName = streamItem.uploaderName ?: "",
-                        thumbnailUrl = streamItem.thumbnails.firstOrNull()?.url
-                            ?: "https://i.ytimg.com/vi/${extractVideoId(streamItem.url)}/hqdefault.jpg",
-                        duration = streamItem.duration,
-                        url = streamItem.url
-                    )
-                )
-            } catch (e: Exception) { }
-        }
-        items
-    }
-
-    // Get trending / home feed
-    suspend fun getTrending(): List<VideoItem> = withContext(Dispatchers.IO) {
-        init()
-        val service = ServiceList.YouTube
-        val extractor = service.getKioskList().getExtractorById("Trending", null)
-        extractor.fetchPage()
-
-        val items = mutableListOf<VideoItem>()
-        extractor.initialPage.items.forEach { item ->
-            try {
-                val streamItem = item as? org.schabi.newpipe.extractor.stream.StreamInfoItem
-                    ?: return@forEach
-                val vidId = extractVideoId(streamItem.url) ?: return@forEach
-                items.add(
-                    VideoItem(
-                        videoId = vidId,
-                        title = streamItem.name ?: "",
-                        channelName = streamItem.uploaderName ?: "",
-                        thumbnailUrl = streamItem.thumbnails.firstOrNull()?.url
-                            ?: "https://i.ytimg.com/vi/$vidId/hqdefault.jpg",
-                        duration = streamItem.duration,
-                        url = streamItem.url
-                    )
-                )
-            } catch (e: Exception) { }
-        }
-        items
     }
 
     fun extractVideoId(url: String): String? {
@@ -148,14 +89,16 @@ object YtDlpHelper {
     }
 }
 
-// NewPipe requires a Downloader implementation
 object LumiXDownloader : Downloader() {
     override fun execute(request: Request): Response {
         val conn = (URL(request.url()).openConnection() as HttpURLConnection).apply {
             requestMethod = request.httpMethod()
             connectTimeout = 15000
             readTimeout = 20000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0")
+            setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"
+            )
             request.headers().forEach { (key, values) ->
                 values.forEach { value -> setRequestProperty(key, value) }
             }
@@ -177,6 +120,12 @@ object LumiXDownloader : Downloader() {
             .mapValues { it.value.joinToString(",") }
 
         conn.disconnect()
-        return Response(responseCode, conn.responseMessage, headers, responseBody, request.url())
+        return Response(
+            responseCode,
+            conn.responseMessage,
+            headers,
+            responseBody,
+            request.url()
+        )
     }
 }
