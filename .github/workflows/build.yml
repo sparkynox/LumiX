@@ -57,7 +57,7 @@ jobs:
             ]
           }' > app/google-services.json
 
-        - name: Add string resources
+       - name: Add string resources
   run: |
     mkdir -p app/src/main/res/values
     if ! grep -q "default_web_client_id" app/src/main/res/values/strings.xml 2>/dev/null; then
