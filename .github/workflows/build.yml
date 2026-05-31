@@ -64,7 +64,6 @@ jobs:
       echo '<resources>
         <string name="default_web_client_id">464309606770-abc123.apps.googleusercontent.com</string>
       </resources>' > app/src/main/res/values/ids.xml
-    fi
 
       - name: Build Release APKs
         id: buildRelease
