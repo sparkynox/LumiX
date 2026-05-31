@@ -57,16 +57,16 @@ object YtDlpHelper {
         Log.d(TAG, "Video Streams count: ${videoStreams?.size ?: 0}")
         Log.d(TAG, "Video Only Streams count: ${videoOnlyStreams?.size ?: 0}")
 
-        // 🎯 FALLBACK: Best available stream
+        // 🎯 FALLBACK: Best available stream (using firstOrNull for v0.24.1)
         val bestStream = when {
             audioStreams != null && audioStreams.isNotEmpty() -> {
-                audioStreams.maxByOrNull { it.averageBitrate ?: 0 }
+                audioStreams.firstOrNull()
             }
             videoStreams != null && videoStreams.isNotEmpty() -> {
-                videoStreams.maxByOrNull { it.averageBitrate ?: 0 }
+                videoStreams.firstOrNull()
             }
             videoOnlyStreams != null && videoOnlyStreams.isNotEmpty() -> {
-                videoOnlyStreams.maxByOrNull { it.averageBitrate ?: 0 }
+                videoOnlyStreams.firstOrNull()
             }
             else -> null
         }
