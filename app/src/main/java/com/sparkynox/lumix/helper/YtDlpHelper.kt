@@ -1,6 +1,7 @@
 package com.sparkynox.lumix.helper
 
 import android.content.Context
+import android.util.Log
 import com.sparkynox.lumix.model.StreamInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +15,7 @@ import java.net.URL
 
 object YtDlpHelper {
 
+    private const val TAG = "YtDlpHelper"
     private var initialized = false
 
     fun init() {
@@ -30,39 +32,67 @@ object YtDlpHelper {
 
         init()
 
-        // 🔁 CHANGE 1: Normalize URL (remove playlist garbage)
         val cleanUrl = normalizeYoutubeUrl(url)
 
         val service = ServiceList.YouTube
 
         val extractor = service.getStreamExtractor(
-            service.streamLHFactory.fromUrl(cleanUrl)   // 🔁 use cleanUrl instead of raw url
+            service.streamLHFactory.fromUrl(cleanUrl)
         )
 
         extractor.fetchPage()
 
+        // 🔍 DEBUG PRINTS
+        Log.d(TAG, "Clean URL: $cleanUrl")
+        Log.d(TAG, "Video ID: ${extractor.id}")
+        Log.d(TAG, "Title: ${extractor.name}")
+        Log.d(TAG, "Uploader: ${extractor.uploaderName}")
+        Log.d(TAG, "Duration: ${extractor.length}")
+
+        val audioStreams = extractor.audioStreams
+        val videoStreams = extractor.videoStreams
+        val videoOnlyStreams = extractor.videoOnlyStreams
+
+        Log.d(TAG, "Audio Streams count: ${audioStreams?.size ?: 0}")
+        Log.d(TAG, "Video Streams count: ${videoStreams?.size ?: 0}")
+        Log.d(TAG, "Video Only Streams count: ${videoOnlyStreams?.size ?: 0}")
+
+        // 🎯 FALLBACK: Best available stream
+        val bestStream = when {
+            audioStreams != null && audioStreams.isNotEmpty() -> {
+                audioStreams.maxByOrNull { it.averageBitrate ?: 0 }
+            }
+            videoStreams != null && videoStreams.isNotEmpty() -> {
+                videoStreams.maxByOrNull { it.averageBitrate ?: 0 }
+            }
+            videoOnlyStreams != null && videoOnlyStreams.isNotEmpty() -> {
+                videoOnlyStreams.maxByOrNull { it.averageBitrate ?: 0 }
+            }
+            else -> null
+        }
+
+        if (bestStream == null) {
+            val errorMsg = """
+                No playable streams found.
+                Audio: ${audioStreams?.size ?: 0}
+                Video: ${videoStreams?.size ?: 0}
+                VideoOnly: ${videoOnlyStreams?.size ?: 0}
+                URL: $cleanUrl
+            """.trimIndent()
+            Log.e(TAG, errorMsg)
+            throw Exception(errorMsg)
+        }
+
+        val streamUrl = bestStream.content
         val videoId = extractVideoId(cleanUrl) ?: ""
         val title = extractor.name ?: "Unknown"
         val uploader = extractor.uploaderName ?: ""
         val duration = extractor.length
 
-        val thumbnail =
-            "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
-
-        val audioStreams = extractor.audioStreams
-
-        if (audioStreams.isNullOrEmpty()) {
-            throw Exception("No audio streams found")
-        }
-
-        val bestAudio = audioStreams.maxByOrNull {
-            it.averageBitrate
-        } ?: throw Exception("No audio stream found")
-
-        val streamUrl = bestAudio.content
+        val thumbnail = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
 
         if (streamUrl.isNullOrEmpty()) {
-            throw Exception("Empty stream URL")
+            throw Exception("Stream URL is empty")
         }
 
         StreamInfo(
@@ -75,7 +105,6 @@ object YtDlpHelper {
         )
     }
 
-    // 🔁 CHANGE 2: Replace extractVideoId with a single robust regex
     fun extractVideoId(url: String): String? {
         val regex = Regex(
             "(?:v=|youtu\\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})"
@@ -83,7 +112,6 @@ object YtDlpHelper {
         return regex.find(url)?.groupValues?.getOrNull(1)
     }
 
-    // 🔁 CHANGE 3: New helper function to clean YouTube URLs
     fun normalizeYoutubeUrl(url: String): String {
         val videoId = extractVideoId(url)
         if (videoId.isNullOrEmpty()) {
@@ -101,77 +129,50 @@ object YtDlpHelper {
     }
 
     fun formatDuration(seconds: Long): String {
-
-        if (seconds <= 0) {
-            return ""
-        }
-
+        if (seconds <= 0) return ""
         val h = seconds / 3600
         val m = (seconds % 3600) / 60
         val s = seconds % 60
-
-        return if (h > 0) {
-            String.format("%d:%02d:%02d", h, m, s)
-        } else {
-            String.format("%d:%02d", m, s)
-        }
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%d:%02d", m, s)
     }
 }
 
 object LumiXDownloader : Downloader() {
 
     override fun execute(request: Request): Response {
-
         val conn = (URL(request.url()).openConnection() as HttpURLConnection).apply {
-
             requestMethod = request.httpMethod()
-
             connectTimeout = 15000
             readTimeout = 20000
-
-            // Android UA
             setRequestProperty(
                 "User-Agent",
                 "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36"
             )
-
             request.headers().forEach { (key, values) ->
                 values.forEach { value ->
                     setRequestProperty(key, value)
                 }
             }
-
             request.dataToSend()?.let { data ->
                 doOutput = true
-
-                outputStream.use {
-                    it.write(data)
-                }
+                outputStream.use { it.write(data) }
             }
         }
 
         val responseCode = conn.responseCode
-
         val responseBody = try {
-            conn.inputStream
-                .bufferedReader()
-                .use { it.readText() }
+            conn.inputStream.bufferedReader().use { it.readText() }
         } catch (_: Exception) {
-            conn.errorStream
-                ?.bufferedReader()
-                ?.use { it.readText() }
-                ?: ""
+            conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
         }
 
         val headers: Map<String, List<String>> =
             conn.headerFields
                 .filterKeys { it != null }
-                .mapValues { (_, value) ->
-                    value ?: emptyList()
-                }
+                .mapValues { (_, value) -> value ?: emptyList() }
 
         val responseMessage = conn.responseMessage ?: ""
-
         conn.disconnect()
 
         return Response(
