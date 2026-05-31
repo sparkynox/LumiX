@@ -42,7 +42,7 @@ object YtDlpHelper {
 
         extractor.fetchPage()
 
-        // 🔍 DEBUG PRINTS
+        // Debug logs
         Log.d(TAG, "Clean URL: $cleanUrl")
         Log.d(TAG, "Video ID: ${extractor.id}")
         Log.d(TAG, "Title: ${extractor.name}")
@@ -57,17 +57,11 @@ object YtDlpHelper {
         Log.d(TAG, "Video Streams count: ${videoStreams?.size ?: 0}")
         Log.d(TAG, "Video Only Streams count: ${videoOnlyStreams?.size ?: 0}")
 
-        // 🎯 FALLBACK: Best available stream (using firstOrNull for v0.24.1)
+        // Compatible bestStream selection (works with v0.24.1 and v0.26.2)
         val bestStream = when {
-            audioStreams != null && audioStreams.isNotEmpty() -> {
-                audioStreams.firstOrNull()
-            }
-            videoStreams != null && videoStreams.isNotEmpty() -> {
-                videoStreams.firstOrNull()
-            }
-            videoOnlyStreams != null && videoOnlyStreams.isNotEmpty() -> {
-                videoOnlyStreams.firstOrNull()
-            }
+            !audioStreams.isNullOrEmpty() -> audioStreams.firstOrNull()
+            !videoStreams.isNullOrEmpty() -> videoStreams.firstOrNull()
+            !videoOnlyStreams.isNullOrEmpty() -> videoOnlyStreams.firstOrNull()
             else -> null
         }
 
